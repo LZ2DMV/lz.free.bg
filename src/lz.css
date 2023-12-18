@@ -1,0 +1,202 @@
+:root {
+  --rep-all: #ffb97c;
+  --rep-analog: #ffffff;
+  --rep-dstar: #79f7ae;
+  --rep-dmr: #80c1fb;
+  --rep-fusion: #ed82ff;
+  --rep-parrot: #ffff7c;
+}
+
+#map {
+  height: 100%;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#sidebar {
+  font-size: 15px;
+  height: 50% !important;
+}
+
+.leaflet-control.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.reptitle {
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+.reptitle > .title-links > a {
+  text-decoration: none;
+  /* margin-right: 1rem; */
+  /* margin-bottom: 0.5rem; */
+  /* margin-top: 0.5rem; */
+}
+
+.reptitle > .title-links,
+.reptitle > h2,
+.reptitle > h3 {
+  width: 100%;
+  text-align: center;
+  margin: 0.25rem 0;
+}
+
+.modes {
+  background-color: rgba(18, 18, 18, 0.75);
+  width: auto !important;
+  height: auto !important;
+  /* padding-top: 0.75rem; */
+  padding-left: 0.75rem;
+  padding-bottom: 0.1rem;
+  padding-right: 0.75rem;
+  margin: 0 !important;
+  /* border: 1px solid black; */
+  border-radius: 5px;
+  border-top-left-radius: 0;
+  overflow: hidden;
+  box-shadow: 5px 5px 8px -4px rgb(0 0 0 / 75%);
+  text-align: center;
+}
+
+.modes > hr {
+  margin: 0;
+}
+
+.modes > center {
+  color: #999999;
+  font-weight: bold;
+  /* padding-left: 0.75rem; */
+}
+
+/* .modes>center>.name {
+      color: #ffb97c;
+    } */
+
+.name-UHF {
+  color: #89a6e7;
+}
+
+.name-VHF {
+  color: #db8787;
+}
+
+.hr-UHF {
+  background-color: var(--rep-all);
+  /* background-color: #89a6e7; */
+  height: 1px;
+  border: none;
+}
+
+.hr-VHF {
+  background-color: var(--rep-all);
+  /* background-color: #db8787; */
+  height: 1px;
+  border: none;
+}
+
+.band-UHF {
+  color: #89a6e7;
+}
+
+.band-VHF {
+  color: #db8787;
+}
+
+.modes .pointer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  background: #7d18a1;
+  color: lightyellow;
+  transform-origin: 100% 0;
+  transform: translate(-29.3%) rotate(-45deg);
+  box-shadow: 0 0 0 999px #7d18a1;
+  clip-path: inset(0 -100%);
+  margin-top: -2px;
+  margin-left: -2px;
+}
+
+.bottom-box {
+  background-color: rgba(18, 18, 18, 0.75);
+  border: 1px solid black;
+  color: white;
+  padding: 0.5rem;
+  border-radius: 5px;
+}
+
+.csv-button {
+  background-color: #0a0a23;
+  color: #fff;
+  border-radius: 50%;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+
+.csv-button:hover {
+  background-color: #6699ff;
+}
+
+.color-rep-all {
+  color: var(--rep-all);
+}
+
+.color-rep-analog {
+  color: var(--rep-analog);
+}
+
+.color-rep-fusion {
+  color: var(--rep-fusion);
+}
+
+.color-rep-dstar {
+  color: var(--rep-dstar);
+}
+
+.color-rep-dmr {
+  color: var(--rep-dmr);
+}
+
+.color-rep-parrot {
+  color: var(--rep-parrot);
+}
+
+.csv-button.all {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-all); */
+  color: var(--rep-all);
+}
+
+.csv-button.analog {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-analog); */
+  color: var(--rep-analog);
+}
+
+.csv-button.fusion {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-fusion); */
+  color: var(--rep-fusion);
+}
+
+.csv-button.dstar {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-dstar); */
+  color: var(--rep-dstar);
+}
+
+.csv-button.dmr {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-dmr); */
+  color: var(--rep-dmr);
+}
+
+.csv-button.parrot {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-parrot); */
+  color: var(--rep-parrot);
+}

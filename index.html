@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<!--
+Може да правите с този код каквото пожелаете - както виждате, той е минимален,
+благодарение на Leaflet и плъгина MarkerCluster за него.
+
+Ако желаете да използвате данните от масивите във ваш проект, лесно може да се отървете
+от HTML таговете със sed и подходящ регулярен израз, който ги обхваща.
+
+Например така (изпълнено под GNU/Linux на дистрибуция със стандартни GNU coreutils):
+
+sed -e 's/<[^>]*>//g' array_file
+
+Изходът от sed ще се нуждае от малко форматиране, но след това може да си конвертирате
+JavaScript масива към JSON или каквото ви душа иска.
+-->
+<html>
+
+<head>
+
+	<script>
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost')
+      location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
+	</script>
+
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="description"
+    content="Карта на радиолюбителските ретранслатори на територията на Република България - актуална информация за честоти и покритие.">
+  <meta name="keywords" content="карта,репитри,ретранслатори,българските,България,радиолюбителски,честоти">
+  <title>Карта на българските радиолюбителски ретранслатори</title>
+  <meta name="viewport" content="initial-scale=1.0">
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-easybutton@2.4.0/src/easy-button.css" />
+  <!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" /> -->
+  <link rel="stylesheet" href="src/lz.css" />
+  <link rel="stylesheet" href="src/L.Control.Sidebar.css" />
+  <link rel="stylesheet" href="src/L.Control.Window.css" />
+  <link rel="stylesheet" href="src/AnimatedSearchBox.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" />
+
+  <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+  <script src="https://unpkg.com/leaflet-easybutton@2.4.0/src/easy-button.js"></script>
+  <script src="https://ivansanchez.gitlab.io/leaflet.maidenhead/src/maidenhead.js"></script>
+  <script src="src/L.Control.Sidebar.js"></script>
+  <script src="src/L.Control.Window.js"></script>
+  <script src="src/leaflet.geometryutil.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/csv-stringify@6.2.0/dist/iife/sync.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@5.0.10-beta/dist/fuse.min.js"></script>
+  <script src="src/AnimatedSearchBox.js"></script>
+</head>
+
+<body>
+  <div id="map"></div>
+  <div id="sidebar"></div>
+  <script src="https://varna.radio/reps.js"></script>
+  <script src="src/lz.js"></script>
+</body>
+
+</html>
