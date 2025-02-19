@@ -256,7 +256,7 @@ function doAlert(force = false) {
 }
 
 function downloadCSV(mode) {
-  var fn = "repeaters_" + mode + ".csv";
+  var fn = "CHIRP_repeaters_" + mode + ".csv";
 
   function exportFile(fileName, rawData, opts = {}) {
     function clean(link) {
@@ -348,6 +348,8 @@ function downloadCSV(mode) {
 
   var output = csv_stringify_sync.stringify(filterRepeaters(reps), {
     header: true,
+    bom: true,
+    record_delimiter: '\r\n',
     columns: [{
         key: "index",
         header: "Location",
@@ -398,11 +400,11 @@ function downloadCSV(mode) {
         }
       },
       number: (val, ctx) => {
-        if (ctx.column == "index")
+        if (ctx.column === "index")
           return {
             value: "" + parseInt(val),
           };
-        if (ctx.column == "tone" || ctx.column == "csvTone") {
+        if (ctx.column === "tone" || ctx.column === "csvTone") {
           if (ctx.index == 5) {
             return {
               value: val ? "TSQL" : "",
@@ -417,6 +419,9 @@ function downloadCSV(mode) {
         return {
           value: val.toFixed(6),
         };
+      },
+      string: (val, ctx) => {
+        return (ctx.column === "comment") ? val.replace(/\r?\n/g, ', ').replace(/,?\s*$/, '') : val;
       },
     },
   });
@@ -816,7 +821,7 @@ function handlePosition(position, fromPin) {
   clearHomeIfExists();
 
   if (!fromPin) {
-    navigator.vibrate([100, 100, 150]);
+    //navigator.vibrate([100, 100, 150]);
     home = L.marker(currentPosition, {
       icon: HomeIcon,
     }).addTo(map);
