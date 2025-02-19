@@ -17,3 +17,4 @@ jobs:
         server: lz.free.bg
         username: lz.free.bg
         password: ${{ secrets.ftp_password }}
+        state-name: ftp-deploy-sync-state.json
