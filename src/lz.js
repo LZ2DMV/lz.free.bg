@@ -32,7 +32,7 @@ repeaters.loadData().then(() => {
       handlePosition(position, false);
     }
     fuseSearch = new Fuse(reps, {
-      keys: ["shortCallsign", "callsign", "loc", "locExtra", "rx", "tx"],
+      keys: ["shortCallsign", "callsign", "loc", "locExtra", "rx", "tx", "channel"],
       shouldSort: true,
       threshold: 0.0,
       location: 0,
