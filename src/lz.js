@@ -443,6 +443,29 @@ L.tileLayer("https://{s}.tile.osm.org/{z}/{x}/{y}.png", {
     '| <a href="#" onclick="doAlert(true);">Контакт</a>',
 }).addTo(map);
 
+// LZ2DMV: We don't want the user to move the map too far away from where the markers are,
+// so we lock the map to its boundaries after it has been fully loaded, but with a bit of
+// buffer on the edges to ensure all the markers and their balloons fit nicely.
+
+let bounds = map.getBounds();
+let paddingFactor = 0.5; // Add 50% padding at the edges
+
+let southWest = bounds.getSouthWest();
+let northEast = bounds.getNorthEast();
+
+let latDiff = northEast.lat - southWest.lat;
+let lngDiff = northEast.lng - southWest.lng;
+
+let newSouthWest = L.latLng(southWest.lat - latDiff * paddingFactor, southWest.lng - lngDiff * paddingFactor);
+let newNorthEast = L.latLng(northEast.lat + latDiff * paddingFactor, northEast.lng + lngDiff * paddingFactor);
+
+let expandedBounds = L.latLngBounds(newSouthWest, newNorthEast);
+map.setMaxBounds(expandedBounds);
+
+// LZ2DMV: Zooming too far away also doesn't make sense.
+
+map.setMinZoom(map.getBoundsZoom(expandedBounds));
+
 // L.easyButton(
 //   "fa-search",
 //   function () {
