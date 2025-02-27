@@ -450,7 +450,7 @@ L.tileLayer("https://{s}.tile.osm.org/{z}/{x}/{y}.png", {
 let bounds = map.getBounds();
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let paddingFactorLat = 0.5; // Padding factor for top and bottom (latitude)
-let paddingFactorLng = isMobile ? 1 : 0.5; // Padding factor for left and right (longitude)
+let paddingFactorLng = isMobile ? 1.2 : 0.5; // Padding factor for left and right (longitude)
 
 let southWest = bounds.getSouthWest();
 let northEast = bounds.getNorthEast();
