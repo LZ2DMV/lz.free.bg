@@ -448,7 +448,9 @@ L.tileLayer("https://{s}.tile.osm.org/{z}/{x}/{y}.png", {
 // buffer on the edges to ensure all the markers and their balloons fit nicely.
 
 let bounds = map.getBounds();
-let paddingFactor = 0.5; // Add 50% padding at the edges
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+let paddingFactorLat = 0.5; // Padding factor for top and bottom (latitude)
+let paddingFactorLng = isMobile ? 1 : 0.5; // Padding factor for left and right (longitude)
 
 let southWest = bounds.getSouthWest();
 let northEast = bounds.getNorthEast();
@@ -456,8 +458,8 @@ let northEast = bounds.getNorthEast();
 let latDiff = northEast.lat - southWest.lat;
 let lngDiff = northEast.lng - southWest.lng;
 
-let newSouthWest = L.latLng(southWest.lat - latDiff * paddingFactor, southWest.lng - lngDiff * paddingFactor);
-let newNorthEast = L.latLng(northEast.lat + latDiff * paddingFactor, northEast.lng + lngDiff * paddingFactor);
+let newSouthWest = L.latLng(southWest.lat - latDiff * paddingFactorLat, southWest.lng - lngDiff * paddingFactorLng);
+let newNorthEast = L.latLng(northEast.lat + latDiff * paddingFactorLat, northEast.lng + lngDiff * paddingFactorLng);
 
 let expandedBounds = L.latLngBounds(newSouthWest, newNorthEast);
 map.setMaxBounds(expandedBounds);
