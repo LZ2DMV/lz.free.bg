@@ -1,4 +1,4 @@
-﻿var repsAll = 0;
+var repsAll = 0;
 var repsFM = 0;
 var repsDStar = 0;
 var repsDMR = 0;
@@ -20,6 +20,7 @@ repeaters.loadData().then(() => {
       addRepeater(r);
     });
     addBottomBox();
+    updateFuseSearch();
     if (callsign) searchNode(callsign);
     if (coords) {
       coords = coords.split(",");
@@ -31,18 +32,11 @@ repeaters.loadData().then(() => {
       };
       handlePosition(position, false);
     }
-    fuseSearch = new Fuse(reps, {
-      keys: ["shortCallsign", "callsign", "loc", "locExtra", "rx", "tx", "channel"],
-      shouldSort: true,
-      threshold: 0.0,
-      location: 0,
-      distance: 0,
-    });
   }
   doAlert();
 });
 
-var addRepeater = function (r) {
+function addRepeater(r) {
   var title =
     '<div class="reptitle">' +
     '<div style="float: left">' +
@@ -106,7 +100,6 @@ var addRepeater = function (r) {
         )
         .join("<br>"),
       className: "modes",
-      // iconSize: new L.Point(256, 256)
     }),
   });
   marker.bindPopup(title, {
@@ -116,6 +109,10 @@ var addRepeater = function (r) {
   // marker.bindTooltip(r.callsign);
   marker.boundary = r.coverage ? r.coverage : null;
   marker.name = r.callsign;
+  marker.repTypes = r.modesArray;
+  r.modesArray.forEach(type => {
+    if (repMarkersByType[type]) repMarkersByType[type].push(marker);
+  });
   markers.addLayer(marker);
   repsAll += 1;
   if (r.modesArray.includes("analog")) repsFM += 1;
@@ -123,89 +120,148 @@ var addRepeater = function (r) {
   if (r.modesArray.includes("dmr")) repsDMR += 1;
   if (r.modesArray.includes("fusion")) repsYSF += 1;
   if (r.modesArray.includes("parrot")) repsParrot += 1;
+  r._marker = marker;
+}
+
+const repTypes = [
+  { key: "analog", label: "Analog/FM", color: "color-rep-analog" },
+  { key: "dstar", label: "D-Star", color: "color-rep-dstar" },
+  { key: "dmr", label: "DMR", color: "color-rep-dmr" },
+  { key: "fusion", label: "Fusion", color: "color-rep-fusion" },
+  { key: "parrot", label: "Parrot", color: "color-rep-parrot" },
+];
+
+let repTypeEnabled = {
+  analog: true,
+  dstar: true,
+  dmr: true,
+  fusion: true,
+  parrot: true,
 };
 
-var addBottomBox = function () {
-  // create bottom-right box with info
-  var box = L.control({
-    position: "bottomright",
-  });
+let repMarkersByType = {
+  analog: [],
+  dstar: [],
+  dmr: [],
+  fusion: [],
+  parrot: [],
+};
+
+function addBottomBox() {
+  var box = L.control({ position: "bottomright" });
   box.onAdd = function (map) {
-    var div = L.DomUtil.create("div", box);
-    L.DomUtil.addClass(div, "bottom-box");
+    var div = L.DomUtil.create("div", "bottom-box foldable-panel folded");
     div.innerHTML =
-      '<table><tr><th colspan="3" class="color-rep-all">Ретранслатори</th></tr>' +
-      "<tr>" +
-      '<td class="color-rep-all">Всички</td>' +
-      '<td align="center"><b class="color-rep-all">' +
-      repsAll +
-      "</b></td>" +
-      '<td align="right">' +
-      '<button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV(\'all\');" class="csv-button all">' +
-      '<i class="fa-solid fa-download"></i>' +
-      "</button>" +
-      "</td>" +
-      "</tr>" +
-      "<tr>" +
-      '<td class="color-rep-analog">Analog/FM</td>' +
-      '<td align="center"><b class="color-rep-analog">' +
-      repsFM +
-      "</b></td>" +
-      '<td align="right">' +
-      '<button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV(\'analog\');" class="csv-button analog">' +
-      '<i class="fa-solid fa-download"></i>' +
-      "</button>" +
-      "</td>" +
-      "</tr>" +
-      "<tr>" +
-      '<td class="color-rep-dstar">D-Star</td>' +
-      '<td align="center"><b class="color-rep-dstar">' +
-      repsDStar +
-      "</b></td>" +
-      '<td align="right">' +
-      '<button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV(\'dstar\');" class="csv-button dstar">' +
-      '<i class="fa-solid fa-download"></i>' +
-      "</button>" +
-      "</td>" +
-      "</tr>" +
-      "<tr>" +
-      '<td class="color-rep-dmr">DMR</td>' +
-      '<td align="center"><b class="color-rep-dmr">' +
-      repsDMR +
-      "</b></td>" +
-      '<td align="right">' +
-      '<button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV(\'dmr\');" class="csv-button dmr">' +
-      '<i class="fa-solid fa-download"></i>' +
-      "</button>" +
-      "</td>" +
-      "</tr>" +
-      "<tr>" +
-      '<td class="color-rep-fusion">Fusion</td>' +
-      '<td align="center"><b class="color-rep-fusion">' +
-      repsYSF +
-      "</b></td>" +
-      '<td align="right">' +
-      '<button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV(\'fusion\');" class="csv-button fusion">' +
-      '<i class="fa-solid fa-download"></i>' +
-      "</button>" +
-      "</td>" +
-      "</tr>" +
-      "<tr>" +
-      '<td class="color-rep-parrot">Parrot</td>' +
-      '<td align="center"><b class="color-rep-parrot">' +
-      repsParrot +
-      "</b></td>" +
-      '<td align="right">' +
-      '<button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV(\'parrot\');" class="csv-button parrot">' +
-      '<i class="fa-solid fa-download"></i>' +
-      "</button>" +
-      "</td>" +
-      "</tr>" +
-      "</table>";
+      `<div class="panel-header" onclick="toggleFoldablePanel(this.parentNode)">
+        <span>Ретранслатори</span>
+        <span class="arrow">&#9660;</span>
+      </div>
+      <div class="panel-content">
+        <table style="width:100%">
+          <tr id="rep-caption-row"><th colspan="4" class="color-rep-all">Ретранслатори</th></tr>
+          <tr>
+            <td></td>
+            <td class="color-rep-all">Всички</td>
+            <td align="center"><b class="color-rep-all">${repsAll}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('all');" class="csv-button all">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input type="checkbox" checked data-type="analog" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-analog">Analog/FM</td>
+            <td align="center"><b class="color-rep-analog">${repsFM}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('analog');" class="csv-button analog">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input type="checkbox" checked data-type="dstar" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-dstar">D-Star</td>
+            <td align="center"><b class="color-rep-dstar">${repsDStar}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('dstar');" class="csv-button dstar">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input type="checkbox" checked data-type="dmr" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-dmr">DMR</td>
+            <td align="center"><b class="color-rep-dmr">${repsDMR}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('dmr');" class="csv-button dmr">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input type="checkbox" checked data-type="fusion" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-fusion">Fusion</td>
+            <td align="center"><b class="color-rep-fusion">${repsYSF}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('fusion');" class="csv-button fusion">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input type="checkbox" checked data-type="parrot" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-parrot">Parrot</td>
+            <td align="center"><b class="color-rep-parrot">${repsParrot}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('parrot');" class="csv-button parrot">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+        </table>
+      </div>`;
     return div;
   };
   box.addTo(map);
+}
+
+window.toggleFoldablePanel = function(panelDiv) {
+  panelDiv.classList.toggle("folded");
 };
+
+window.onRepTypeFilterChange = function(e) {
+  const type = e.target.getAttribute("data-type");
+  repTypeEnabled[type] = e.target.checked;
+  markers.clearLayers();
+  reps.forEach(r => {
+    const marker = r._marker;
+    if (!marker) return;
+    if (r.modesArray.some(t => repTypeEnabled[t])) {
+      markers.addLayer(marker);
+    }
+  });
+};
+
+function updateFuseSearch() {
+  fuseSearch = new Fuse(reps, {
+    keys: ["shortCallsign", "callsign", "loc", "locExtra", "rx", "tx", "channel"],
+    shouldSort: true,
+    threshold: 0.0,
+    location: 0,
+    distance: 0,
+  });
+}
 
 function doAlert(force = false) {
   if (location.protocol === "https:" || location.hostname === "localhost") {
@@ -583,6 +639,25 @@ draggablePin.bindPopup(
 );
 
 draggablePin.on("dragend", function () {
+  // LZ2DMV: If the pin is dragged, but we have no markers on the map due to the filtering
+  // of repeater types, we need to enable all repeater types, so that the markers are displayed.
+  const allTypes = Object.keys(repTypeEnabled);
+  const noneSelected = allTypes.every(type => !repTypeEnabled[type]);
+  if (noneSelected) {
+    allTypes.forEach(type => {
+      repTypeEnabled[type] = true;
+      const cb = document.querySelector(`input[type="checkbox"][data-type="${type}"]`);
+      if (cb && !cb.checked) cb.checked = true;
+    });
+    markers.clearLayers();
+    reps.forEach(r => {
+      const marker = r._marker;
+      if (!marker) return;
+      if (r.modesArray.some(t => repTypeEnabled[t])) {
+        markers.addLayer(marker);
+      }
+    });
+  }
   var position = {
     coords: {
       latitude: draggablePin.getLatLng().lat,
@@ -710,6 +785,35 @@ markers.on("unspiderfied", function (a) {
 
 function searchLayers(name) {
   var found = false;
+  let rep = reps.find(r => r.callsign.toUpperCase() === name.toUpperCase());
+  let marker = rep && rep._marker;
+
+  let isVisible = marker && markers.hasLayer(marker);
+
+  if (rep && marker && !isVisible) {
+    let changed = false;
+    rep.modesArray.forEach(type => {
+      if (!repTypeEnabled[type]) {
+        repTypeEnabled[type] = true;
+        let cb = document.querySelector(`input[type="checkbox"][data-type="${type}"]`);
+        if (cb && !cb.checked) {
+          cb.checked = true;
+        }
+        changed = true;
+      }
+    });
+    if (changed) {
+      markers.clearLayers();
+      reps.forEach(r => {
+        const m = r._marker;
+        if (!m) return;
+        if (r.modesArray.some(t => repTypeEnabled[t])) {
+          markers.addLayer(m);
+        }
+      });
+    }
+  }
+
   markers.eachLayer(function (layer) {
     if (layer.name.toUpperCase() == name.toUpperCase()) {
       markers.zoomToShowLayer(layer, function () {
