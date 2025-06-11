@@ -200,3 +200,80 @@ body {
   /* border: 1px solid var(--rep-parrot); */
   color: var(--rep-parrot);
 }
+
+.foldable-panel {
+  position: relative;
+  min-width: 220px;
+  transition: max-height 0.3s cubic-bezier(.4,0,.2,1), box-shadow 0.3s;
+  overflow: hidden;
+  max-height: 500px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  padding: 0;
+}
+
+.foldable-panel.folded {
+  max-height: 38px !important;
+  box-shadow: none;
+}
+
+.foldable-panel .panel-header {
+  cursor: pointer;
+  background: #222;
+  color: var(--rep-all);
+  font-weight: bold;
+  padding: 8px 16px;
+  border-radius: 5px 5px 0 0;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.foldable-panel .panel-header .arrow {
+  transition: transform 0.3s;
+  margin-left: 8px;
+}
+
+.foldable-panel.folded .panel-header .arrow {
+  transform: rotate(-90deg);
+}
+
+.foldable-panel .panel-content {
+  padding: 0 8px 8px 8px;
+  background: rgba(34, 34, 34, 0.7);
+  border-radius: 0 0 5px 5px;
+  transition: opacity 0.2s;
+}
+
+.foldable-panel.folded .panel-content {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  padding: 0;
+}
+
+.foldable-panel:not(.folded) #rep-caption-row {
+  display: none;
+}
+
+.rep-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.rep-filters label {
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rep-filters input[type="checkbox"] {
+  accent-color: #6699ff;
+  margin-right: 4px;
+}
