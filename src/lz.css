@@ -277,3 +277,14 @@ body {
   accent-color: #6699ff;
   margin-right: 4px;
 }
+
+.rep-modes-sup {
+  display: inline-block;
+  vertical-align: super;
+  font-size: 0.7em;
+  color: #3a3a3a;
+  margin-left: 3px;
+  text-decoration: none;
+  font-weight: normal;
+  letter-spacing: 0.5px;
+}
