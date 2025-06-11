@@ -950,17 +950,27 @@ function handlePosition(position, fromPin) {
       .getLatLng()
       .distanceTo(currentPosition)
       .toFixed(0) / 1000;
+
+    let rep = reps.find(r => r.callsign === closestPoints[i].layer.name);
+    let modesSup = "";
+    if (rep && rep.modesArray && rep.modesArray.length) {
+      modesSup = `<span class="rep-modes-sup">${rep.modesArray.map(m => {
+        let t = repTypes.find(rt => rt.key === m);
+        return t ? t.label : m.toUpperCase();
+      }).join("+")}</span>`;
+    }
+
     nodesList +=
       c +
-      ". <a href='#' onclick='window.overlay && map.removeLayer(overlay); window.overlay=null; map.closePopup(); searchLayers(\"" +
+      `. <a href='#' onclick='window.overlay && map.removeLayer(overlay); window.overlay=null; map.closePopup(); searchLayers("${closestPoints[i].layer.name}");'><b>` +
       closestPoints[i].layer.name +
-      "\");'><b>" +
-      closestPoints[i].layer.name +
-      "</b></a>, " +
+      `</b></a>, ` +
       locDesc +
       "<i><b> (" +
       distance.toFixed(2) +
-      " км)</i></b><br/>";
+      " км)</i></b>" +
+      (modesSup ? " " + modesSup : "") +
+      "<br/>";
     c++;
   }
 
