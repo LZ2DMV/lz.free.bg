@@ -147,6 +147,32 @@ let repMarkersByType = {
   parrot: [],
 };
 
+function loadRepTypeEnabled() {
+  try {
+    const saved = localStorage.getItem("lz_repTypeEnabled");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      Object.keys(repTypeEnabled).forEach(k => {
+        if (typeof parsed[k] === "boolean") {
+          repTypeEnabled[k] = parsed[k];
+        }
+      });
+    }
+  } catch (e) {
+    alert('Браузърът няма достъп до localStorage, проверете настройките!');
+  }
+}
+
+function saveRepTypeEnabled() {
+  try {
+    localStorage.setItem("lz_repTypeEnabled", JSON.stringify(repTypeEnabled));
+  } catch (e) {
+    alert('Браузърът няма достъп до localStorage, проверете настройките!');
+  }
+}
+
+loadRepTypeEnabled();
+
 function addBottomBox() {
   var box = L.control({ position: "bottomright" });
   box.onAdd = function (map) {
@@ -171,7 +197,7 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" checked data-type="analog" onchange="onRepTypeFilterChange(event)">
+              <input type="checkbox" ${repTypeEnabled.analog ? "checked" : ""} data-type="analog" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-analog">Analog/FM</td>
             <td align="center"><b class="color-rep-analog">${repsFM}</b></td>
@@ -183,7 +209,7 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" checked data-type="dstar" onchange="onRepTypeFilterChange(event)">
+              <input type="checkbox" ${repTypeEnabled.dstar ? "checked" : ""} data-type="dstar" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-dstar">D-Star</td>
             <td align="center"><b class="color-rep-dstar">${repsDStar}</b></td>
@@ -195,7 +221,7 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" checked data-type="dmr" onchange="onRepTypeFilterChange(event)">
+              <input type="checkbox" ${repTypeEnabled.dmr ? "checked" : ""} data-type="dmr" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-dmr">DMR</td>
             <td align="center"><b class="color-rep-dmr">${repsDMR}</b></td>
@@ -207,7 +233,7 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" checked data-type="fusion" onchange="onRepTypeFilterChange(event)">
+              <input type="checkbox" ${repTypeEnabled.fusion ? "checked" : ""} data-type="fusion" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-fusion">Fusion</td>
             <td align="center"><b class="color-rep-fusion">${repsYSF}</b></td>
@@ -219,7 +245,7 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" checked data-type="parrot" onchange="onRepTypeFilterChange(event)">
+              <input type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-parrot">Parrot</td>
             <td align="center"><b class="color-rep-parrot">${repsParrot}</b></td>
@@ -243,6 +269,7 @@ window.toggleFoldablePanel = function(panelDiv) {
 window.onRepTypeFilterChange = function(e) {
   const type = e.target.getAttribute("data-type");
   repTypeEnabled[type] = e.target.checked;
+  saveRepTypeEnabled();
   markers.clearLayers();
   reps.forEach(r => {
     const marker = r._marker;
@@ -657,6 +684,7 @@ draggablePin.on("dragend", function () {
       const cb = document.querySelector(`input[type="checkbox"][data-type="${type}"]`);
       if (cb && !cb.checked) cb.checked = true;
     });
+    saveRepTypeEnabled();
     markers.clearLayers();
     reps.forEach(r => {
       const marker = r._marker;
@@ -970,8 +998,12 @@ function handlePosition(position, fromPin) {
       "<hr>",
       '<hr><img src="img/pin.png" width="25" height="25">'
     );
-    localStorage.setItem("lastPinLat", position.coords.latitude);
-    localStorage.setItem("lastPinLon", position.coords.longitude);
+    try {
+      localStorage.setItem("lastPinLat", position.coords.latitude);
+      localStorage.setItem("lastPinLon", position.coords.longitude);
+    } catch (e) {
+      alert('Браузърът няма достъп до localStorage, проверете настройките!');
+    }
   }
   /*} else {
   map.setView(home.getLatLng(), 25);
