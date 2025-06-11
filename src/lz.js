@@ -368,20 +368,21 @@ function downloadCSV(mode) {
   }
 
   function filterRepeaters(reps) {
-    var filtered = JSON.parse(JSON.stringify(reps)).filter((r) => {
-      // deep clone of array
+    var filtered = reps.filter((r) => {
       var show = false;
-      delete r.coverage;
-      r.duplex = r.tx - r.rx < 0 ? "-" : r.tx - r.rx > 0 ? "+" : "";
-      r.offset = Math.abs(r.tx - r.rx);
+      if (mode === "all" || r.mode[mode]) show = true;
+      if (r.mode.ssb && mode == "analog") show = true;
+      return show;
+    }).map((r) => {
+      let duplex = r.tx - r.rx < 0 ? "-" : r.tx - r.rx > 0 ? "+" : "";
+      let offset = Math.abs(r.tx - r.rx);
       if (Math.abs(r.tx - r.rx) > 8) {
-        r.duplex = "split";
-        r.offset = r.tx;
+        duplex = "split";
+        offset = r.tx;
       }
-      r.csvTone = r.tone || 79.7;
-      r.csvMode =
-        r.mode.analog || r.mode.parrot ? "FM" : r.mode.dmr ? "DMR" : "Auto";
-      r.comment =
+      let csvTone = r.tone || 79.7;
+      let csvMode = r.mode.analog || r.mode.parrot ? "FM" : r.mode.dmr ? "DMR" : "Auto";
+      let comment =
         (r.channel !== "N/A" ? "Chan: " + r.channel + "\r\n" : "") +
         "Modes: " +
         r.modesArray.join("+") +
@@ -389,14 +390,21 @@ function downloadCSV(mode) {
         r.location +
         "\r\n" +
         r.infoString;
-      if (mode === "all" || r.mode[mode]) show = true;
-      if (r.mode.ssb && m == "analog") show = true;
-      return show;
+      return {
+        index: 0,
+        callsign: r.callsign,
+        rx: r.rx,
+        duplex: duplex,
+        offset: offset,
+        tone: r.tone,
+        csvTone: csvTone,
+        csvMode: csvMode,
+        comment: comment,
+      };
     });
 
-    let index = 0;
-    filtered.forEach((r) => {
-      r.index = index++;
+    filtered.forEach((r, idx) => {
+      r.index = idx;
     });
 
     return filtered;
