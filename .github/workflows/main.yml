@@ -2,14 +2,32 @@ on:
   push:
     branches:
       - main
+
 name: Deploy website on push
+
 jobs:
   web-deploy:
     name: Deploy
     runs-on: ubuntu-latest
+
     steps:
     - name: Get latest code
       uses: actions/checkout@v3
+
+    - name: Add UTF-8 BOM to relevant files
+      run: |
+        shopt -s globstar
+        for file in **/*.{html,css,js,ts,json}; do
+          if [ -f "$file" ]; then
+            head -c 3 "$file" | grep -q $'\xEF\xBB\xBF'
+            if [ $? -ne 0 ]; then
+              echo "Adding BOM to: $file"
+              mv "$file" "$file.bak"
+              (echo -ne '\xEF\xBB\xBF'; cat "$file.bak") > "$file"
+              rm "$file.bak"
+            fi
+          fi
+        done
 
     - name: Push files
       uses: SamKirkland/FTP-Deploy-Action@v4.3.4
