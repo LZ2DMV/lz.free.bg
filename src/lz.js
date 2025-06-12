@@ -705,6 +705,8 @@ draggablePin.on("dragend", function () {
         markers.addLayer(marker);
       }
     });
+    const el = document.getElementById("active-marker-count");
+    if (el) el.textContent = markers.getLayers().length;
   }
   var position = {
     coords: {
