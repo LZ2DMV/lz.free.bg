@@ -1096,7 +1096,7 @@ searchbox.onInput("keyup", function (e) {
       var results = fuseSearch.search(value);
       formatedResults = results.map(
         (res) =>
-        `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.join('+')}`
+        `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
       );
       searchbox.setItems(formatedResults);
     } else {
