@@ -16,8 +16,7 @@ jobs:
 
     - name: Add UTF-8 BOM to relevant files
       run: |
-        shopt -s globstar
-        for file in **/*.{html,css,js,json}; do
+        for file in index.html lz.js lz.css; do
           if [ -f "$file" ]; then
             bom=$(head -c 3 "$file" | xxd -p)
             if [ "$bom" != "efbbbf" ]; then
