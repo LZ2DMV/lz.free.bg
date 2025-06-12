@@ -861,6 +861,8 @@ function searchLayers(name) {
           markers.addLayer(m);
         }
       });
+      var el = document.getElementById("active-marker-count");
+      if (el) el.textContent = markers.getLayers().length;
     }
   }
 
@@ -1094,7 +1096,7 @@ searchbox.onInput("keyup", function (e) {
       var results = fuseSearch.search(value);
       formatedResults = results.map(
         (res) =>
-        `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx}`
+        `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.join('+')}`
       );
       searchbox.setItems(formatedResults);
     } else {
