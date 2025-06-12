@@ -21,6 +21,16 @@ repeaters.loadData().then(() => {
     });
     addBottomBox();
     updateFuseSearch();
+    markers.clearLayers();
+    reps.forEach(r => {
+      const marker = r._marker;
+      if (!marker) return;
+      if (r.modesArray.some(t => repTypeEnabled[t])) {
+        markers.addLayer(marker);
+      }
+    });
+    var el = document.getElementById("active-marker-count");
+    if (el) el.textContent = markers.getLayers().length;
     if (callsign) searchNode(callsign);
     if (coords) {
       coords = coords.split(",");
@@ -179,7 +189,7 @@ function addBottomBox() {
     var div = L.DomUtil.create("div", "bottom-box foldable-panel folded");
     div.innerHTML =
       `<div class="panel-header" onclick="toggleFoldablePanel(this.parentNode)">
-        <span>Ретранслатори</span>
+        <span id="panel-caption">Ретранслатори (<span id="active-marker-count">${markers.getLayers().length}</span>)</span>
         <span class="arrow">&#9660;</span>
       </div>
       <div class="panel-content">
@@ -278,6 +288,8 @@ window.onRepTypeFilterChange = function(e) {
       markers.addLayer(marker);
     }
   });
+  var el = document.getElementById("active-marker-count");
+  if (el) el.textContent = markers.getLayers().length;
 };
 
 function updateFuseSearch() {
