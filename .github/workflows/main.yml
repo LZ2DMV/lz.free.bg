@@ -17,10 +17,10 @@ jobs:
     - name: Add UTF-8 BOM to relevant files
       run: |
         shopt -s globstar
-        for file in **/*.{html,css,js,ts,json}; do
+        for file in **/*.{html,css,js,json}; do
           if [ -f "$file" ]; then
-            head -c 3 "$file" | grep -q $'\xEF\xBB\xBF'
-            if [ $? -ne 0 ]; then
+            bom=$(head -c 3 "$file" | xxd -p)
+            if [ "$bom" != "efbbbf" ]; then
               echo "Adding BOM to: $file"
               mv "$file" "$file.bak"
               (echo -ne '\xEF\xBB\xBF'; cat "$file.bak") > "$file"
