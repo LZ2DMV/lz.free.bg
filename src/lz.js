@@ -31,7 +31,7 @@ repeaters.loadData().then(() => {
     });
     var el = document.getElementById("active-marker-count");
     if (el) el.textContent = markers.getLayers().length;
-    if (callsign) searchNode(callsign);
+    if (callsign) searchLayers(callsign);
     if (coords) {
       coords = coords.split(",");
       var position = {
@@ -853,15 +853,6 @@ function searchLayers(name) {
   if (!found) {
     alert("Няма такъв ретранслатор на картата!");
   }
-}
-
-function searchNode(callsign) {
-  var cs = callsign ? callsign : window.prompt("Позивна на репитър:", "LZ0BOT");
-  if (!cs) {
-    alert("Необходима е позивна за търсене!");
-    return;
-  }
-  searchLayers(cs);
 }
 
 function clearHomeIfExists() {
