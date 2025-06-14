@@ -76,7 +76,7 @@ function addRepeater(r) {
     "Отговорник: <b>" +
     r.keeper +
     "</b><br>" +
-    (r.altitude ? "Надморска височина: <b>" + r.altitude + "</b>м<br>" : "") +
+    (r.altitude ? "Надморска височина: <b>" + r.altitude + "</b> м<br>" : "") +
     "QTH: <b>" +
     r.qth +
     "</b><br>" +
@@ -571,14 +571,6 @@ map.setMaxBounds(expandedBounds);
 
 map.setMinZoom(map.getBoundsZoom(expandedBounds));
 
-// L.easyButton(
-//   "fa-search",
-//   function () {
-//     searchNode();
-//   },
-//   "Търсене на репитер"
-// ).addTo(map);
-
 var geoButton = L.easyButton({
   states: [{
       stateName: "default",
@@ -616,22 +608,6 @@ var sidebar = L.control.sidebar("sidebar", {
 });
 
 map.addControl(sidebar);
-
-// function handleBox() {
-//   var style = document.createElement('style');
-//   style.type = 'text/css';
-//   //прозрачни popup-и
-//   style.innerHTML = '.leaflet-popup-content-wrapper { opacity: 0.2; }'+
-//     '.leaflet-popup-tip-container { display: none; }';
-
-//   head = document.getElementsByTagName('head')[0];
-
-//   if(this.checked) {
-//     head.appendChild(style);
-//   } else {
-//     head.removeChild(head.lastChild);
-// 	}
-// }
 
 map.createPane("general");
 
@@ -772,7 +748,6 @@ markers.on("popupopen", function (e) {
     out.addLayer(m);
     m.openPopup();
     map.addLayer(overlay);
-    //като свойство на прозореца за глобален достъп до обекта
     window.overlay = overlay;
   }
 });
@@ -1052,27 +1027,10 @@ function handleError(error) {
   geoButton.enable();
 }
 
-function checkPersonInCharge(call) {
-  alert("Отговорник: " + pic[call]);
-}
-
-// function contact() {
-//   alert("Пишете на мейл m (маймунка) mitko (точка) xyz.");
-// }
-
 var url_string = window.location.href;
 var url = new URL(url_string);
 var callsign = url.searchParams.get("callsign");
 var coords = url.searchParams.get("coords");
-
-/*
-markers.on('animationend', function (e) {
-	removeOverlay();
-	map.closePopup();
-});
-*/
-
-//document.getElementById("box").addEventListener("click", handleBox, false);
 
 /*
  * SearchBox
