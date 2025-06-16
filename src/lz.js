@@ -950,10 +950,19 @@ function handlePosition(position, fromPin) {
             data-state="0"
         >${modeLabel}</span>
     `;
+
+    window.handleLayerClick = function(layerName) {
+      if (window.overlay) {
+        map.removeLayer(overlay);
+      }
+      window.overlay = null;
+      map.closePopup();
+      searchLayers(layerName);
+    };
     
     nodesList +=
       c +
-      `. <a href='#' onclick='window.overlay && map.removeLayer(overlay); window.overlay=null; map.closePopup(); searchLayers("${closestPoints[i].layer.name}");'><b>` +
+      `. <a href='#' onclick='handleLayerClick("${closestPoints[i].layer.name}")'><b>` +
       closestPoints[i].layer.name +
       `</b></a>, ` +
       locDesc +
