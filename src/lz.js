@@ -908,6 +908,8 @@ function getLocation() {
   }
 }
 
+let rotatingInfoInterval;
+
 function handlePosition(position, fromPin) {
   geoButton.state("default");
   geoButton.enable();
@@ -928,20 +930,27 @@ function handlePosition(position, fromPin) {
     locDesc = closestPoints[i].layer.options.title;
     locDesc = locDesc.substring(locDesc.indexOf(" - ") + 2);
     distance =
-      closestPoints[i].layer
-      .getLatLng()
-      .distanceTo(currentPosition)
-      .toFixed(0) / 1000;
+        closestPoints[i].layer
+            .getLatLng()
+            .distanceTo(currentPosition)
+            .toFixed(0) / 1000;
 
     let rep = reps.find(r => r.callsign === closestPoints[i].layer.name);
-    let modesSup = "";
-    if (rep && rep.modesArray && rep.modesArray.length) {
-      modesSup = `<span class="rep-modes-sup">${rep.modesArray.map(m => {
+
+    let modeLabel = rep.modesArray.map(m => {
         let t = repTypes.find(rt => rt.key === m);
         return t ? t.label : m.toUpperCase();
-      }).join("+")}</span>`;
-    }
+    }).join("+");
 
+    let modesSup = `
+        <span class="rep-modes-sup rotating-info"
+            data-mode="${modeLabel}"
+            data-tx="${rep.tx}"
+            data-rx="${rep.rx}"
+            data-state="0"
+        >${modeLabel}</span>
+    `;
+    
     nodesList +=
       c +
       `. <a href='#' onclick='window.overlay && map.removeLayer(overlay); window.overlay=null; map.closePopup(); searchLayers("${closestPoints[i].layer.name}");'><b>` +
@@ -955,6 +964,29 @@ function handlePosition(position, fromPin) {
       "<br/>";
     c++;
   }
+
+  if (rotatingInfoInterval) {
+    clearInterval(rotatingInfoInterval);
+  }
+  rotatingInfoInterval = setInterval(() => {
+    document.querySelectorAll('.rotating-info').forEach(el => {
+      let state = parseInt(el.getAttribute('data-state') || '0');
+      let nextState = (state + 1) % 3;
+      el.setAttribute('data-state', nextState);
+
+      switch (nextState) {
+        case 0:
+          el.textContent = el.dataset.mode;
+          break;
+        case 1:
+          el.innerHTML = `<span class="dot dot-green"></span>${el.dataset.rx} MHz`;
+          break;
+        case 2:
+          el.innerHTML = `<span class="dot dot-red"></span>${el.dataset.tx} MHz`;
+          break;
+      }
+    });
+  }, 2000);
 
   nodesList +=
     "<br /><hr><i>Вашите координати: " +
