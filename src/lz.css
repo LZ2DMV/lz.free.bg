@@ -288,3 +288,20 @@ body {
   font-weight: normal;
   letter-spacing: 0.5px;
 }
+
+.dot {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 50%;
+  margin-right: 0.4em;
+  vertical-align: middle;
+}
+
+.dot-red {
+  background: #f44336;
+}
+
+.dot-green {
+  background: #4caf50;
+}
