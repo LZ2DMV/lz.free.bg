@@ -948,6 +948,7 @@ function handlePosition(position, fromPin) {
             data-tx="${rep.tx}"
             data-rx="${rep.rx}"
             data-state="0"
+            ${rep.tone ? `data-tone="${rep.tone}"` : ""}
         >${modeLabel}</span>
     `;
 
@@ -979,8 +980,10 @@ function handlePosition(position, fromPin) {
   }
   rotatingInfoInterval = setInterval(() => {
     document.querySelectorAll('.rotating-info').forEach(el => {
+      const hasTone = el.hasAttribute('data-tone');
+      const maxState = hasTone ? 4 : 3;
       let state = parseInt(el.getAttribute('data-state') || '0');
-      let nextState = (state + 1) % 3;
+      let nextState = (state + 1) % maxState;
       el.setAttribute('data-state', nextState);
 
       switch (nextState) {
@@ -992,6 +995,13 @@ function handlePosition(position, fromPin) {
           break;
         case 2:
           el.innerHTML = `<span class="dot dot-red"></span>${el.dataset.tx} MHz`;
+          break;
+        case 3:
+          if (hasTone) {
+            el.innerHTML = `<span class="fa-solid fa-lock dot padlock-dot"></span> ${el.dataset.tone} Hz`;
+          } else {
+            el.textContent = el.dataset.mode;
+          }
           break;
       }
     });
