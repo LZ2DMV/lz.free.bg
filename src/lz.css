@@ -305,3 +305,15 @@ body {
 .dot-green {
   background: #4caf50;
 }
+
+.padlock-dot {
+  font-size: 0.9em;
+  width: 0.9em;
+  height: 0.9em;
+  display: inline-block;
+  vertical-align: middle;
+  color: #005347;
+  margin-right: 0.4em;
+  text-align: center;
+  line-height: 0.9em;
+}
