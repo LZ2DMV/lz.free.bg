@@ -980,8 +980,8 @@ function handlePosition(position, fromPin) {
   }
   rotatingInfoInterval = setInterval(() => {
     document.querySelectorAll('.rotating-info').forEach(el => {
-      const hasTone = el.hasAttribute('data-tone');
-      const maxState = hasTone ? 4 : 3;
+      const hasTone = el.hasAttribute('data-tone') && el.dataset.tone && el.dataset.tone !== '';
+      const maxState = 4;
       let state = parseInt(el.getAttribute('data-state') || '0');
       let nextState = (state + 1) % maxState;
       el.setAttribute('data-state', nextState);
@@ -997,11 +997,8 @@ function handlePosition(position, fromPin) {
           el.innerHTML = `<span class="dot dot-red"></span>${el.dataset.tx} MHz`;
           break;
         case 3:
-          if (hasTone) {
-            el.innerHTML = `<span class="fa-solid fa-lock dot padlock-dot"></span> ${el.dataset.tone} Hz`;
-          } else {
-            el.textContent = el.dataset.mode;
-          }
+          el.innerHTML = `<span class="fa-solid fa-lock dot padlock-dot"></span> ` +
+            (hasTone ? `${el.dataset.tone} Hz` : 'няма тон');
           break;
       }
     });
