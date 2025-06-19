@@ -317,3 +317,26 @@ body {
   text-align: center;
   line-height: 0.9em;
 }
+
+.fa-window-restore {
+  color: #444444;
+  opacity: 0.92;
+}
+
+.copied-label {
+  color: #2e7d5a;
+  background: #e6f4ee;
+  border: 1px solid #2e7d5a;
+  border-radius: 8px;
+  padding: 2px 10px;
+  margin-left: 6px;
+  font-weight: bold;
+  font-size: 1em;
+  float: right;
+  transition: opacity 0.3s;
+  opacity: 1;
+}
+
+.copied-label.fade-out {
+  opacity: 0;
+}
