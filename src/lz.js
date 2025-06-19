@@ -50,7 +50,7 @@ function addRepeater(r) {
   var title =
     '<div class="reptitle">' +
     '<div style="float: left">' +
-    '<a href="#" class="remove-for-sidebar" title="отвори в странична лента" onclick="setSidebar();"><i class="fa-solid fa-arrow-left "></i></a>' +
+    '<a href="#" class="remove-for-sidebar" title="Отвори в странична лента" onclick="setSidebar();"><i class="fa-solid fa-window-restore"></i></a>' +
     "</div>" +
     '<h2><a href = "?callsign=' +
     r.callsign +
@@ -1016,11 +1016,7 @@ function handlePosition(position, fromPin) {
       6
     ).toUpperCase() +
     "</i>" +
-    "<br/><a href='?coords=" +
-    position.coords.latitude.toFixed(5) +
-    "," +
-    position.coords.longitude.toFixed(5) +
-    "' target='_blank' style='text-decoration:none; float: right;'><i class='fa-solid fa-link'></i> Вземи линк</a>";
+    "<br/><a href='#' id='copy-link-btn' style='text-decoration:none; float: right;'><i class='fa-solid fa-link'></i> Вземи линк</a>";
 
   //if (typeof home == 'undefined') {
   clearHomeIfExists();
@@ -1052,6 +1048,34 @@ function handlePosition(position, fromPin) {
   sidebar.setContent(nodesList);
   activeForNearbyNodes = true;
   sidebar.show();
+
+  setTimeout(() => {
+    function attachCopyHandler() {
+      const btn = document.getElementById('copy-link-btn');
+      if (btn) {
+        btn.onclick = function(e) {
+          e.preventDefault();
+          const url = location.origin + location.pathname + '?coords=' +
+            position.coords.latitude.toFixed(5) + ',' +
+            position.coords.longitude.toFixed(5);
+          navigator.clipboard.writeText(url).then(() => {
+            btn.outerHTML = "<span class='copied-label' id='copied-label'>Копирано!</span>";
+            setTimeout(() => {
+              const label = document.getElementById('copied-label');
+              if (label) {
+                label.classList.add('fade-out');
+                setTimeout(() => {
+                  label.outerHTML = "<a href='#' id='copy-link-btn' style='text-decoration:none; float: right;'><i class='fa-solid fa-link'></i> Вземи линк</a>";
+                  attachCopyHandler();
+                }, 300);
+              }
+            }, 600);
+          });
+        };
+      }
+    }
+    attachCopyHandler();
+  }, 100);
 }
 
 function handleError(error) {
