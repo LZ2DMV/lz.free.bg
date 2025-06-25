@@ -1146,4 +1146,22 @@ function search() {
     searchbox.clear();
   }, 600);
 }
+
+markers.on('clustermouseover', function (e) {
+  const cluster = e.layer;
+  const childMarkers = cluster.getAllChildMarkers();
+  const callsigns = childMarkers.map(m => m.name).join(', ');
+  const clusterIcon = cluster._icon;
+  if (clusterIcon) {
+    clusterIcon.setAttribute('title', callsigns);
+  }
+});
+
+markers.on('clustermouseout', function (e) {
+  const cluster = e.layer;
+  const clusterIcon = cluster._icon;
+  if (clusterIcon) {
+    clusterIcon.removeAttribute('title');
+  }
+});
 //&&
