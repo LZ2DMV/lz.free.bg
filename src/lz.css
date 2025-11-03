@@ -32,16 +32,16 @@ body {
   font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
 
-.reptitle > .title-links > a {
+.reptitle>.title-links>a {
   text-decoration: none;
   /* margin-right: 1rem; */
   /* margin-bottom: 0.5rem; */
   /* margin-top: 0.5rem; */
 }
 
-.reptitle > .title-links,
-.reptitle > h2,
-.reptitle > h3 {
+.reptitle>.title-links,
+.reptitle>h2,
+.reptitle>h3 {
   width: 100%;
   text-align: center;
   margin: 0.25rem 0;
@@ -64,11 +64,11 @@ body {
   text-align: center;
 }
 
-.modes > hr {
+.modes>hr {
   margin: 0;
 }
 
-.modes > center {
+.modes>center {
   color: #999999;
   font-weight: bold;
   /* padding-left: 0.75rem; */
@@ -204,10 +204,10 @@ body {
 .foldable-panel {
   position: relative;
   min-width: 220px;
-  transition: max-height 0.3s cubic-bezier(.4,0,.2,1), box-shadow 0.3s;
+  transition: max-height 0.3s cubic-bezier(.4, 0, .2, 1), box-shadow 0.3s;
   overflow: hidden;
   max-height: 500px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
   padding: 0;
 }
 
@@ -339,4 +339,46 @@ body {
 
 .copied-label.fade-out {
   opacity: 0;
+}
+
+.terrain-profile-button {
+  display: inline-block;
+  font-size: 1em;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(180deg, #4CAF50, #2E8B57);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease, filter .12s ease;
+}
+
+/* Disabled state */
+.terrain-profile-button:disabled,
+.terrain-profile-button[disabled],
+.terrain-profile-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  transform: none;
+  filter: grayscale(30%) brightness(0.95);
+}
+
+.terrain-profile-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22)
+}
+
+.terrain-profile-button:active {
+  transform: translateY(0);
+  opacity: .95
+}
+
+.terrain-profile-button .small-br {
+  display: block;
+  font-size: 0.85em;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.95)
 }

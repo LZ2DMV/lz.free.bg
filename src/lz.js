@@ -61,7 +61,17 @@ function addRepeater(r) {
     "<b>" +
     r.location +
     "</b>" +
-    "</div><hr>" +
+    "</div>" +
+    // Inline style block for the button to provide improved appearance and rounded corners
+    "<div style='width: 100%; text-align: center;'>" +
+    '<button class="terrain-profile-button" title="Генерирай профил на терена" onClick="generateTerrainProfile(\'' + r.callsign + '\')">' +
+    'Генерирай профил на терена' +
+    '<span class="small-br">от тук до поставеното габърче</span>' +
+    '</button>' +
+    "<div id='terrain-profile-" + r.callsign + "' style='width: 100%; text-align: center;'>" +
+    "</div>" +
+    "</div>" +
+    "<hr>" +
     "RX: <b>" +
     r.rx +
     "</b> MHz<br>" +
@@ -100,15 +110,15 @@ function addRepeater(r) {
         r.band +
         '">' +
         r.modesArray
-        .map(
-          (m) =>
-          '<span class="modes-text color-rep-' +
-          m +
-          '">' +
-          m.toUpperCase() +
-          "</span>"
-        )
-        .join("<br>"),
+          .map(
+            (m) =>
+              '<span class="modes-text color-rep-' +
+              m +
+              '">' +
+              m.toUpperCase() +
+              "</span>"
+          )
+          .join("<br>"),
       className: "modes",
     }),
   });
@@ -131,6 +141,99 @@ function addRepeater(r) {
   if (r.modesArray.includes("fusion")) repsYSF += 1;
   if (r.modesArray.includes("parrot")) repsParrot += 1;
   r._marker = marker;
+}
+
+function generateTerrainProfile(callsign) {
+  const rep = reps.find(r => r.callsign === callsign);
+  if (!rep) {
+    alert('Не е намерен репитър: ' + callsign);
+    return;
+  }
+  
+  const pinCoords = {
+    lat: draggablePin.getLatLng().lat,
+    lon: draggablePin.getLatLng().lng,
+  };
+
+  const _terrainButtons = Array.from(document.querySelectorAll('.terrain-profile-button'));
+  _terrainButtons.forEach(b => b.disabled = true);
+
+  const container = document.getElementById('terrain-profile-' + callsign);
+  if (container) {
+    container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.lat.toFixed(4) + ', ' + rep.lon.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
+  }
+
+  // Helper: build HeyWhatsThat.com terrain profile image URL
+  // https://www.heywhatsthat.com/techfaq.html#profiler_api
+  function getTerrainProfileImage(node1, node2) {
+    // Line colour and marker colours (hex without #)
+    const lineColour = 'FF0000';
+    const node1MarkerColour = 'FF3366';
+    const node2MarkerColour = 'FF3366';
+
+    // Coordinates
+    const node1Latitude = node1.lat;
+    const node1Longitude = node1.lon;
+    const node2Latitude = node2.lat;
+    const node2Longitude = node2.lon;
+
+    // Elevations (meters MSL) if available; otherwise leave blank per API
+    const node1ElevationMSL = (rep.altitude ? rep.altitude : '');
+    const node2ElevationMSL = '';
+
+    // Attribution source domain
+    // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
+    const websiteDomain = 'lz.free.bg';
+
+    const params = new URLSearchParams({
+      src: websiteDomain,
+      axes: 1,      // include grid and scale
+      metric: 1,    // metric units
+      // curvature: 0, // do not include earth curvature line
+      greatcircle: 1, // use great circle path
+      // refraction: '', // default refraction
+      // exaggeration: '', // default exaggeration
+      // freq: '', // no frequency line
+      width: 1600,
+      height: 500,
+      pt0: `${node1Latitude},${node1Longitude},${lineColour},${node1ElevationMSL},${node1MarkerColour}`,
+      pt1: `${node2Latitude},${node2Longitude},${lineColour},${node2ElevationMSL},${node2MarkerColour}`,
+    });
+
+    return 'http://profile.heywhatsthat.com/bin/profile.cgi?' + params.toString();
+    // return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
+  }
+
+  // Build and inject the image
+  try {
+    const terrainImageUrl = getTerrainProfileImage({ lat: rep.lat, lon: rep.lon }, pinCoords);
+    if (container) {
+      const alt = `Профил на терена между ${callsign} и габърчето`;
+      container.innerHTML = `
+        <div class="text-muted small" style="margin: 0.25rem 0 0.5rem 0;">Изображение от <a href="http://www.heywhatsthat.com" target="_blank">HeyWhatsThat.com</a></div>
+        <a href="${terrainImageUrl}" target="_blank">
+          <img src="${terrainImageUrl}"
+               alt="${alt}"
+               style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
+               onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
+        </a>
+        <!-- <a href="${terrainImageUrl}&curvature=1" target="_blank">
+          <img src="${terrainImageUrl}&curvature=1"
+               alt="${alt}"
+               style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
+               onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
+        </a> -->
+        `;
+    }
+  } catch (e) {
+    if (container) {
+      container.innerHTML = '<div class="text-danger">Възникна грешка при генериране на профила на терена.</div>';
+    }
+    console.error('Грешка при генериране на профила на терена:', e);
+  } finally {
+    // Re-enable when this function finishes (end of current call stack)
+    setTimeout(() => _terrainButtons.forEach(b => b.disabled = false), 500);
+  }
 }
 
 const repTypes = [
@@ -272,11 +375,11 @@ function addBottomBox() {
   box.addTo(map);
 }
 
-window.toggleFoldablePanel = function(panelDiv) {
+window.toggleFoldablePanel = function (panelDiv) {
   panelDiv.classList.toggle("folded");
 };
 
-window.onRepTypeFilterChange = function(e) {
+window.onRepTypeFilterChange = function (e) {
   const type = e.target.getAttribute("data-type");
   repTypeEnabled[type] = e.target.checked;
   saveRepTypeEnabled();
@@ -368,15 +471,15 @@ function downloadCSV(mode) {
       byteOrderMark,
       encoding
     } =
-    typeof opts === "string" ? {
+      typeof opts === "string" ? {
         mimeType: opts,
       } :
-      opts;
+        opts;
 
     const data =
       encoding !== void 0 ?
-      new TextEncoder(encoding).encode([rawData]) :
-      rawData;
+        new TextEncoder(encoding).encode([rawData]) :
+        rawData;
     const blobData = byteOrderMark !== void 0 ? [byteOrderMark, data] : [data];
     const blob = new Blob(blobData, {
       type: mimeType || "application/octet-stream",
@@ -454,45 +557,45 @@ function downloadCSV(mode) {
     bom: true,
     record_delimiter: '\r\n',
     columns: [{
-        key: "index",
-        header: "Location",
-      },
-      {
-        key: "callsign",
-        header: "Name",
-      },
-      {
-        key: "rx",
-        header: "Frequency",
-      },
-      {
-        key: "duplex",
-        header: "Duplex",
-      },
-      {
-        key: "offset",
-        header: "Offset",
-      },
-      {
-        key: "tone",
-        header: "Tone",
-      },
-      {
-        key: "csvTone",
-        header: "rToneFreq",
-      },
-      {
-        key: "csvTone",
-        header: "cToneFreq",
-      },
-      {
-        key: "csvMode",
-        header: "Mode",
-      },
-      {
-        key: "comment",
-        header: "Comment",
-      },
+      key: "index",
+      header: "Location",
+    },
+    {
+      key: "callsign",
+      header: "Name",
+    },
+    {
+      key: "rx",
+      header: "Frequency",
+    },
+    {
+      key: "duplex",
+      header: "Duplex",
+    },
+    {
+      key: "offset",
+      header: "Offset",
+    },
+    {
+      key: "tone",
+      header: "Tone",
+    },
+    {
+      key: "csvTone",
+      header: "rToneFreq",
+    },
+    {
+      key: "csvTone",
+      header: "cToneFreq",
+    },
+    {
+      key: "csvMode",
+      header: "Mode",
+    },
+    {
+      key: "comment",
+      header: "Comment",
+    },
     ],
     cast: {
       object: (val, ctx) => {
@@ -573,16 +676,16 @@ map.setMinZoom(map.getBoundsZoom(expandedBounds));
 
 var geoButton = L.easyButton({
   states: [{
-      stateName: "default",
-      icon: "fa-map-marker",
-      onClick: getLocation,
-      title: "Покажи репитрите около мен",
-    },
-    {
-      stateName: "wait",
-      icon: "fa fa-spinner fa-spin",
-      title: "Покажи репитрите около мен",
-    },
+    stateName: "default",
+    icon: "fa-map-marker",
+    onClick: getLocation,
+    title: "Покажи репитрите около мен",
+  },
+  {
+    stateName: "wait",
+    icon: "fa fa-spinner fa-spin",
+    title: "Покажи репитрите около мен",
+  },
   ],
 }).addTo(map);
 
@@ -650,10 +753,10 @@ var draggablePin = L.marker(
   new L.LatLng(
     localStorage.getItem("lastPinLat") || 42.779,
     localStorage.getItem("lastPinLon") || 28.356), {
-    draggable: true,
-    icon: PinIcon,
-    zIndexOffset: 500,
-  }
+  draggable: true,
+  icon: PinIcon,
+  zIndexOffset: 500,
+}
 ).addTo(map);
 
 draggablePin.bindPopup(
@@ -930,16 +1033,16 @@ function handlePosition(position, fromPin) {
     locDesc = closestPoints[i].layer.options.title;
     locDesc = locDesc.substring(locDesc.indexOf(" - ") + 2);
     distance =
-        closestPoints[i].layer
-            .getLatLng()
-            .distanceTo(currentPosition)
-            .toFixed(0) / 1000;
+      closestPoints[i].layer
+        .getLatLng()
+        .distanceTo(currentPosition)
+        .toFixed(0) / 1000;
 
     let rep = reps.find(r => r.callsign === closestPoints[i].layer.name);
 
     let modeLabel = rep.modesArray.map(m => {
-        let t = repTypes.find(rt => rt.key === m);
-        return t ? t.label : m.toUpperCase();
+      let t = repTypes.find(rt => rt.key === m);
+      return t ? t.label : m.toUpperCase();
     }).join("+");
 
     let modesSup = `
@@ -952,7 +1055,7 @@ function handlePosition(position, fromPin) {
         >${modeLabel}</span>
     `;
 
-    window.handleLayerClick = function(layerName) {
+    window.handleLayerClick = function (layerName) {
       if (window.overlay) {
         map.removeLayer(overlay);
       }
@@ -960,7 +1063,7 @@ function handlePosition(position, fromPin) {
       map.closePopup();
       searchLayers(layerName);
     };
-    
+
     nodesList +=
       c +
       `. <a href='#' onclick='handleLayerClick("${closestPoints[i].layer.name}")'><b>` +
@@ -1053,7 +1156,7 @@ function handlePosition(position, fromPin) {
     function attachCopyHandler() {
       const btn = document.getElementById('copy-link-btn');
       if (btn) {
-        btn.onclick = function(e) {
+        btn.onclick = function (e) {
           e.preventDefault();
           const url = location.origin + location.pathname + '?coords=' +
             position.coords.latitude.toFixed(5) + ',' +
@@ -1117,7 +1220,7 @@ searchbox.onInput("keyup", function (e) {
       var results = fuseSearch.search(value);
       formatedResults = results.map(
         (res) =>
-        `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
+          `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
       );
       searchbox.setItems(formatedResults);
     } else {
