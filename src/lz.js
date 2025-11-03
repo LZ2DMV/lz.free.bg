@@ -188,19 +188,21 @@ function generateTerrainProfile(callsign) {
       src: websiteDomain,
       axes: 1,      // include grid and scale
       metric: 1,    // metric units
-      // curvature: 0, // do not include earth curvature line
+      curvature: 1, // do not include earth curvature line
       greatcircle: 1, // use great circle path
-      // refraction: '', // default refraction
-      // exaggeration: '', // default exaggeration
-      // freq: '', // no frequency line
+      refraction: '', // default refraction
+      exaggeration: '', // default exaggeration
+      groundrelative: '',
+      los: 1,
+      freq: parseInt(rep.rx, 10), // no frequency line
       width: 1600,
       height: 500,
       pt0: `${node1Latitude},${node1Longitude},${lineColour},${node1ElevationMSL},${node1MarkerColour}`,
       pt1: `${node2Latitude},${node2Longitude},${lineColour},${node2ElevationMSL},${node2MarkerColour}`,
     });
 
-    return 'http://profile.heywhatsthat.com/bin/profile.cgi?' + params.toString();
-    // return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
+    // return 'http://profile.heywhatsthat.com/bin/profile.cgi?' + params.toString();
+    return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
   }
 
   // Build and inject the image
@@ -811,6 +813,46 @@ function doOverlay(image, LatStart, LngStart, LatEnd, LngEnd) {
   }
 }
 
+// Create a HeyWhatsThat contour tile overlay as a Leaflet TileLayer
+function createContoursOverlay(options = {}) {
+  // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
+  const websiteDomain = 'lz.free.bg';
+  const color = options.color || '83422580'; // semi-transparent brown (RRGGBBAA)
+
+  function defaultIntervalForZoom(z) {
+    // Per docs: minimums (m): 0-4:200, 5-7:80, 8:40, 9:20, 10-13:8, 14:4, 15:2, 16+:0.8
+    // Use ~4x minimum as a safe, visually reasonable default.
+    let min;
+    if (z <= 4) min = 200;
+    else if (z <= 7) min = 80;
+    else if (z === 8) min = 40;
+    else if (z === 9) min = 20;
+    else if (z <= 13) min = 8;
+    else if (z === 14) min = 4;
+    else if (z === 15) min = 2;
+    else min = 0.8;
+    const val = Math.max(1, Math.round(min * 4));
+    return options.interval || val;
+  }
+
+  const layer = L.tileLayer('', {
+    pane: 'general',
+    opacity: 1,
+    tileSize: 256,
+    attribution: 'Contours © HeyWhatsThat.com',
+  });
+
+  layer.getTileUrl = function (coords) {
+    const z = coords.z;
+    const interval = defaultIntervalForZoom(z);
+    const x = coords.x;
+    const y = coords.y;
+    return `https://contour.heywhatsthat.com/bin/contour_tiles.cgi?zoom=${z}&x=${x}&y=${y}&color=${color}&interval=${interval}&src=${encodeURIComponent(websiteDomain)}`;
+  };
+
+  return layer;
+}
+
 function removeOverlay() {
   if (sidebarActive !== true && activeForNearbyNodes !== true) {
     if (window.overlay) {
@@ -844,6 +886,36 @@ markers.on("popupopen", function (e) {
       // p.target.closePopup();
       removeOverlay();
       // console.log(p.target)
+    });
+
+    markers.removeLayer(m);
+    out.addLayer(m);
+    m.openPopup();
+    map.addLayer(overlay);
+    window.overlay = overlay;
+  } else {
+    // No RF coverage image available; fall back to HeyWhatsThat contour tiles overlay
+    if (window._contoursSuppressed) {
+      return; // Avoid repeated attempts if previously blocked/failed
+    }
+    var overlay = createContoursOverlay({});
+    const m = e.popup._source;
+
+    // Ensure overlay is cleaned up if the marker is removed
+    m.on("remove", function (p) {
+      removeOverlay();
+    });
+
+    // If tiles fail to load (blocked or server error), remove the overlay to avoid repeated errors
+    overlay.on('tileerror', function(ev) {
+      if (!window._contoursSuppressed) {
+        console.debug('Contours unavailable or blocked; suppressing further attempts. First failure at z=' + ev.coords.z + ' x=' + ev.coords.x + ' y=' + ev.coords.y);
+      }
+      window._contoursSuppressed = true;
+      if (window.overlay) {
+        try { map.removeLayer(window.overlay); } catch (_) {}
+        window.overlay = null;
+      }
     });
 
     markers.removeLayer(m);
