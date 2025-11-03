@@ -62,7 +62,6 @@ function addRepeater(r) {
     r.location +
     "</b>" +
     "</div>" +
-    // Inline style block for the button to provide improved appearance and rounded corners
     "<div style='width: 100%; text-align: center;'>" +
     '<button class="terrain-profile-button" title="Генерирай профил на терена" onClick="generateTerrainProfile(\'' + r.callsign + '\')">' +
     'Генерирай профил на терена' +
