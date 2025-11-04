@@ -393,3 +393,47 @@ body {
   margin-top: 4px;
   color: rgba(255, 255, 255, 0.95)
 }
+
+.terrain-profile-link-container {
+  width: 100%;
+  text-align: center;
+  margin-bottom: 0.5em;
+}
+
+.terrain-profile-link {
+  font-size: 0.97em;
+  color: #0074d9;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: inline;
+  font-weight: normal;
+}
+
+.terrain-profile-comment,
+.terrain-profile-credit {
+  font-size: 0.85em;
+  margin-top: 4px;
+  color: rgba(34, 34, 34, 0.95);
+  text-align: center;
+}
+
+.terrain-profile-link-container.sidebar-mode,
+.terrain-profile-link-container[style*="text-align: left"] {
+  text-align: left !important;
+}
+
+.terrain-profile-link-container.sidebar-mode .terrain-profile-comment,
+.terrain-profile-link-container[style*="text-align: left"] .terrain-profile-comment,
+.terrain-profile-link-container.sidebar-mode .terrain-profile-credit,
+.terrain-profile-link-container[style*="text-align: left"] .terrain-profile-credit {
+  text-align: left !important;
+  margin-top: 2px;
+}
+
+.terrain-profile-button {
+  display: none !important;
+}
