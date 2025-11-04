@@ -166,6 +166,13 @@ async function loadFromAPI() {
 })();
 
 function addRepeater(r) {
+  var terrainProfileLink =
+    '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
+    `<a href="#" class="terrain-profile-link" title="Генерирай профил на терена" onclick="generateTerrainProfile('${r.callsign}');return false;">Генерирай профил на терена</a>` +
+    '<div class="terrain-profile-comment">от тук до поставеното габърче</div>' +
+    `<div id='terrain-profile-${r.callsign}' style='width: 100%; text-align: center;'></div>` +
+    '</div>';
+
   var title =
     '<div class="reptitle">' +
     '<div style="float: left">' +
@@ -181,14 +188,7 @@ function addRepeater(r) {
     r.location +
     "</b>" +
     "</div>" +
-    "<div style='width: 100%; text-align: center;'>" +
-    '<button class="terrain-profile-button" title="Генерирай профил на терена" onClick="generateTerrainProfile(\'' + r.callsign + '\')">' +
-    'Генерирай профил на терена' +
-    '<span class="small-br">от тук до поставеното габърче</span>' +
-    '</button>' +
-    "<div id='terrain-profile-" + r.callsign + "' style='width: 100%; text-align: center;'>" +
-    "</div>" +
-    "</div>" +
+    terrainProfileLink +
     "<hr>" +
     "RX: <b>" +
     r.rx +
@@ -209,7 +209,7 @@ function addRepeater(r) {
     r.qth +
     "</b><br>" +
     (r.echolink ? "Echolink #: <b>" + r.echolink + "</b><br>" : "") +
-  (r.allstarlink ? "AllStarLink Node: <b>" + r.allstarlink + "</b><br>" : "") +
+    (r.allstarlink ? "AllStarLink Node: <b>" + r.allstarlink + "</b><br>" : "") +
     (r.zello ? "Zello: <b>" + r.zello + "</b><br>" : "") +
     "<hr>" +
     r.infoHTML +
@@ -245,7 +245,6 @@ function addRepeater(r) {
     // autoClose: false,
     // autoPan: false,
   });
-  // marker.bindTooltip(r.callsign);
   marker.boundary = r.coverage ? r.coverage : null;
   marker.name = r.callsign;
   marker.repTypes = r.modesArray;
@@ -269,70 +268,61 @@ function generateTerrainProfile(callsign) {
     alert('Не е намерен репитър: ' + callsign);
     return;
   }
-  
+
   const pinCoords = {
     lat: draggablePin.getLatLng().lat,
     lon: draggablePin.getLatLng().lng,
   };
 
-  const _terrainButtons = Array.from(document.querySelectorAll('.terrain-profile-button'));
-  _terrainButtons.forEach(b => b.disabled = true);
-
   const container = document.getElementById('terrain-profile-' + callsign);
   if (container) {
+    const parent = container.parentElement;
+    if (parent) {
+      const link = parent.querySelector('.terrain-profile-link');
+      const comment = parent.querySelector('.terrain-profile-comment');
+      if (link) link.style.display = 'none';
+      if (comment) comment.style.display = 'none';
+    }
     container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.lat.toFixed(4) + ', ' + rep.lon.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
   }
 
-  // Helper: build HeyWhatsThat.com terrain profile image URL
-  // https://www.heywhatsthat.com/techfaq.html#profiler_api
   function getTerrainProfileImage(node1, node2) {
-    // Line colour and marker colours (hex without #)
     const lineColour = 'FF0000';
     const node1MarkerColour = 'FF3366';
     const node2MarkerColour = 'FF3366';
-
-    // Coordinates
     const node1Latitude = node1.lat;
     const node1Longitude = node1.lon;
     const node2Latitude = node2.lat;
     const node2Longitude = node2.lon;
-
-    // Elevations (meters MSL) if available; otherwise leave blank per API
     const node1ElevationMSL = (rep.altitude ? rep.altitude : '');
     const node2ElevationMSL = '';
-
-    // Attribution source domain
-    // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
     const websiteDomain = 'lz.free.bg';
 
     const params = new URLSearchParams({
       src: websiteDomain,
-      axes: 1,      // include grid and scale
-      metric: 1,    // metric units
-      curvature: 1, // do not include earth curvature line
-      greatcircle: 1, // use great circle path
-      refraction: '', // default refraction
-      exaggeration: '', // default exaggeration
+      axes: 1,
+      metric: 1,
+      curvature: 1,
+      greatcircle: 1,
+      refraction: '',
+      exaggeration: '',
       groundrelative: '',
       los: 1,
-      freq: parseInt(rep.rx, 10), // no frequency line
+      freq: parseInt(rep.rx, 10),
       width: 1600,
       height: 500,
       pt0: `${node1Latitude},${node1Longitude},${lineColour},${node1ElevationMSL},${node1MarkerColour}`,
       pt1: `${node2Latitude},${node2Longitude},${lineColour},${node2ElevationMSL},${node2MarkerColour}`,
     });
 
-    // return 'http://profile.heywhatsthat.com/bin/profile.cgi?' + params.toString();
     return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
   }
 
-  // Build and inject the image
   try {
     const terrainImageUrl = getTerrainProfileImage({ lat: rep.lat, lon: rep.lon }, pinCoords);
     if (container) {
       const alt = `Профил на терена между ${callsign} и габърчето`;
       container.innerHTML = `
-        <div class="text-muted small" style="margin: 0.25rem 0 0.5rem 0;">Изображение от <a href="http://www.heywhatsthat.com" target="_blank">HeyWhatsThat.com</a></div>
         <a href="${terrainImageUrl}" target="_blank">
           <img src="${terrainImageUrl}"
                alt="${alt}"
@@ -340,16 +330,14 @@ function generateTerrainProfile(callsign) {
                style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
                onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
         </a>
-        `;
+        <div class="terrain-profile-credit">Изображение от HeyWhatsThat.com</div>
+      `;
     }
   } catch (e) {
     if (container) {
       container.innerHTML = '<div class="text-danger">Възникна грешка при генериране на профила на терена.</div>';
     }
     console.error('Грешка при генериране на профила на терена:', e);
-  } finally {
-    // Re-enable when this function finishes (end of current call stack)
-    setTimeout(() => _terrainButtons.forEach(b => b.disabled = false), 500);
   }
 }
 
@@ -1006,6 +994,16 @@ markers.on("popupopen", function (e) {
     sidebar.hide();
   }
   activeMarker = e.popup._source;
+  const popupContent = e.popup.getContent();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(popupContent, "text/html");
+  const terrainContainer = doc.querySelector('.terrain-profile-link-container');
+  if (terrainContainer) {
+    const link = terrainContainer.querySelector('.terrain-profile-link');
+    const comment = terrainContainer.querySelector('.terrain-profile-comment');
+    if (link) link.style.display = '';
+    if (comment) comment.style.display = '';
+  }
   var b = e.layer.boundary;
 
   if (b) {
@@ -1215,15 +1213,39 @@ function setSidebar() {
   var el = parser.parseFromString(c, "text/html");
   el.querySelectorAll(".remove-for-sidebar").forEach((e) =>
     e.parentNode.removeChild(e)
-  ); // remove the link to sidebar
-  var result = el.querySelector(".reptitle").innerHTML;
+  );
+  var reptitle = el.querySelector(".reptitle");
+  if (reptitle) {
+    var terrainContainer = reptitle.querySelector('.terrain-profile-link-container');
+    if (terrainContainer) {
+      terrainContainer.style.textAlign = 'left';
+      terrainContainer.style.marginTop = '0.5em';
+      var comment = terrainContainer.querySelector('.terrain-profile-comment');
+      if (comment) {
+        comment.style.textAlign = 'left';
+        comment.style.marginTop = '2px';
+      }
+    }
+  }
+  var result = reptitle ? reptitle.innerHTML : '';
   sidebar.setContent("<p>" + result + "</p>");
-  //map.closePopup();
   sidebar.show();
 }
 
 sidebar.on("show", function () {
   map.closePopup();
+  const sidebarContent = sidebar.options.content;
+  if (sidebarContent) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(sidebarContent, "text/html");
+    const terrainContainer = doc.querySelector('.terrain-profile-link-container');
+    if (terrainContainer) {
+      const link = terrainContainer.querySelector('.terrain-profile-link');
+      const comment = terrainContainer.querySelector('.terrain-profile-comment');
+      if (link) link.style.display = '';
+      if (comment) comment.style.display = '';
+    }
+  }
 });
 
 sidebar.on("hide", function () {
