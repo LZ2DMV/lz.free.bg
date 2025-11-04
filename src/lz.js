@@ -10,6 +10,11 @@ var fuseSearch;
 let dbLastUpdate = '';
 let dbChangelog = null;
 
+// Feature flags
+// Disable HeyWhatsThat contour tiles overlay by default to avoid API blocking
+// Toggle to true manually in console or code if needed in the future.
+window.LZ_ENABLE_CONTOURS_OVERLAY = false;
+
 // Helpers migrated from old reps.js
 function getChannelFromMHz(rxMHz) {
   const f = parseFloat(rxMHz).toFixed(4) * 10000;
@@ -1029,6 +1034,10 @@ markers.on("popupopen", function (e) {
     window.overlay = overlay;
   } else {
     // No RF coverage image available; fall back to HeyWhatsThat contour tiles overlay
+    if (!window.LZ_ENABLE_CONTOURS_OVERLAY) {
+      // Contours overlay globally disabled
+      return;
+    }
     if (window._contoursSuppressed) {
       return; // Avoid repeated attempts if previously blocked/failed
     }
