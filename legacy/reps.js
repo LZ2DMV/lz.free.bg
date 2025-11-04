@@ -1,4 +1,4 @@
-﻿/**
+/**
  ** JS Library to ease your work with BG Repeaters JSON DB.
  *
  * @version: 0.5
@@ -6,6 +6,8 @@
  * @license: MIT - https://af.mit-license.org/
  *!JSON DB: https://varna.radio/reps.json
  * @summary: check the end of this file for changelog
+ *
+ *!TODO: autogenerate maidenhead  https://gist.github.com/stephenhouser/4ad8c1878165fc7125cb547431a2bdaa
  *
  *?To include this script in your project:
  * <script src="https://varna.radio/reps.js"></script>
@@ -215,6 +217,7 @@ console.log(repeaters.changelog());
 
     getFormatedFreq(f) {
       let fstr = parseFloat(f).toFixed(4).toString();
+      // the next line can be replaced by parseFloat(), which should remove the extra zeroes in the end, tho we need 3 digits after the decimal point probably... may be we can use padEnd() somehow.
       let r = fstr.charAt(fstr.length - 1) === '0' ? parseFloat(f).toFixed(3) : parseFloat(f).toFixed(4);
       return r;
     }

@@ -3,48 +3,162 @@ var repsFM = 0;
 var repsDStar = 0;
 var repsDMR = 0;
 var repsYSF = 0;
+var repsNXDN = 0;
 var repsParrot = 0;
 var reps = [];
 var fuseSearch;
+let dbLastUpdate = '';
+let dbChangelog = null;
 
-const repeaters = new Repeaters({
-  warnings: true,
-  debug: true,
-});
-
-repeaters.loadData().then(() => {
-  reps = repeaters.get();
-  if (reps.length) {
-    reps.forEach((r) => {
-      r.shortCallsign = r.callsign.substr(3);
-      addRepeater(r);
-    });
-    addBottomBox();
-    updateFuseSearch();
-    markers.clearLayers();
-    reps.forEach(r => {
-      const marker = r._marker;
-      if (!marker) return;
-      if (r.modesArray.some(t => repTypeEnabled[t])) {
-        markers.addLayer(marker);
-      }
-    });
-    var el = document.getElementById("active-marker-count");
-    if (el) el.textContent = markers.getLayers().length;
-    if (callsign) searchLayers(callsign);
-    if (coords) {
-      coords = coords.split(",");
-      var position = {
-        coords: {
-          latitude: parseFloat(coords[0]),
-          longitude: parseFloat(coords[1]),
-        },
-      };
-      handlePosition(position, false);
-    }
+// Helpers migrated from old reps.js
+function getChannelFromMHz(rxMHz) {
+  const f = parseFloat(rxMHz).toFixed(4) * 10000;
+  let chan = "N/A";
+  if (f >= 1452000 && f < 1454000 && (f - 1452000) % 250 == 0) { // VHF R8-R15
+    chan = 'R' + parseInt(((f - 1452000) / 250) + 8);
+  } else if (f >= 1456000 && f < 1460000 && (f - 1456000) % 250 == 0) { // VHF R0-R7
+    chan = 'R' + parseInt((f - 1456000) / 250);
+  } else if (f >= 4300000 && f < 4400000 && (f - 4300000) % 125 == 0) { // UHF
+    chan = 'RU' + ((f - 4300000) / 125).toFixed(0).padStart(3, '0');
   }
-  doAlert();
-});
+  if (f >= 1450000 && f < 1460000 && (f - 1450000) % 125 == 0)
+    chan = (chan === 'N/A' ? '' : chan + ', ') + 'RV' + ((f - 1450000) / 125).toFixed(0).padStart(2, '0');
+  return chan;
+}
+
+function getFormatedFreqMHz(f) {
+  let fstr = parseFloat(f).toFixed(4).toString();
+  let r = fstr.charAt(fstr.length - 1) === '0' ? parseFloat(f).toFixed(3) : parseFloat(f).toFixed(4);
+  return r;
+}
+
+function mapAPIModesToInternal(modes) {
+  const map = { fm: 'analog', fm_analog: 'analog', analog: 'analog', dmr: 'dmr', dstar: 'dstar', ysf: 'fusion', fusion: 'fusion', parrot: 'parrot', nxdn: 'nxdn' };
+  const out = {};
+  if (modes && typeof modes === 'object') {
+    Object.keys(modes).forEach(k => {
+      if (modes[k]) out[map[k] || k] = true;
+    });
+  }
+  return out;
+}
+
+function mapAPIRepeater(r) {
+  const rxMHz = r && r.freq && r.freq.rx ? (r.freq.rx / 1e6) : undefined;
+  const txMHz = r && r.freq && r.freq.tx ? (r.freq.tx / 1e6) : undefined;
+  const tone = r && r.freq ? (r.freq.tone || r.freq.ctcss || undefined) : undefined;
+  const modeObj = mapAPIModesToInternal(r.modes || {});
+  const modesArray = Object.keys(modeObj).sort();
+  const band = typeof rxMHz === 'number' && !isNaN(rxMHz) ? (rxMHz > 146 ? 'UHF' : 'VHF') : 'VHF';
+  const infoVal = r.info;
+  const infoArr = Array.isArray(infoVal) ? infoVal : (typeof infoVal === 'string' && infoVal !== '' ? [infoVal] : []);
+  const infoHTML = infoArr.join('<br>');
+  const infoString = infoArr.join("\r\n").replace(/<[^>]+>/gm, '');
+  const coverage = r.coverage || r.coverage_map || null;
+  const echolink = r.internet && r.internet.echolink ? r.internet.echolink : (r.echolink || 0);
+  const zello = r.internet && r.internet.zello ? r.internet.zello : (r.zello || null);
+  const allstarlink = r.internet && r.internet.allstarlink ? r.internet.allstarlink : (r.allstarlink || 0);
+  return {
+    callsign: r.callsign,
+    location: (r.place || '') + (r.place_extra ? (' - ' + r.place_extra) : ''),
+    loc: r.place || '',
+    locExtra: r.place_extra || '',
+    info: infoArr,
+    infoHTML,
+    infoString,
+    qth: r.qth || '',
+    keeper: r.keeper || '',
+    altitude: parseInt(r.altitude) || 0,
+    lat: r.latitude,
+    lon: r.longitude,
+    mode: modeObj,
+    modesArray,
+    modesString: modesArray.join(', '),
+    rx: rxMHz !== undefined ? getFormatedFreqMHz(rxMHz) : 0,
+    tx: txMHz !== undefined ? getFormatedFreqMHz(txMHz) : 0,
+    channel: (r && r.freq && r.freq.channel) ? r.freq.channel : (rxMHz !== undefined ? getChannelFromMHz(rxMHz) : 'N/A'),
+    tone: tone,
+    band,
+    coverage: coverage,
+    echolink: echolink,
+    zello: zello,
+    allstarlink: allstarlink,
+  };
+}
+
+const api = new BGRepeaters({ baseURL: 'https://api.varna.radio/v1' });
+
+async function loadFromAPI() {
+  // API no longer requires filters; fetch full list
+  const list = await api.getRepeaters();
+  return (list || []).filter(r => !r.disabled).map(mapAPIRepeater);
+}
+
+(async function initLoad() {
+  try {
+    reps = await loadFromAPI();
+    // Populate changelog using library’s endpoint shape: { lastChanged, changes: [{date, who, info}] }
+    try {
+      const cl = await api.getChangelog();
+      if (cl && typeof cl === 'object') {
+        const grouped = {};
+        const arr = Array.isArray(cl.changes) ? cl.changes : [];
+        arr.forEach(item => {
+          const dateKey = item && item.date ? String(item.date).slice(0, 10) : '';
+          if (!dateKey) return;
+          const who = item.who ? String(item.who) : '';
+          const info = item.info ? String(item.info) : '';
+          const line = [info, who].filter(Boolean).join(' — ');
+          if (!grouped[dateKey]) grouped[dateKey] = [];
+          grouped[dateKey].push(line || JSON.stringify(item));
+        });
+        // Order keys desc
+        const ordered = {};
+        Object.keys(grouped)
+          .sort((a, b) => (a > b ? -1 : a < b ? 1 : 0))
+          .forEach(k => { ordered[k] = grouped[k]; });
+        dbChangelog = ordered;
+        dbLastUpdate = (cl.lastChanged ? String(cl.lastChanged).slice(0, 10) : (Object.keys(ordered)[0] || ''));
+      }
+    } catch (e) {
+      console.warn('Failed to obtain changelog from API:', e);
+    }
+
+    if (reps.length) {
+      reps.forEach((r) => {
+        r.shortCallsign = r.callsign.substr(3);
+        addRepeater(r);
+      });
+      addBottomBox();
+      updateFuseSearch();
+      markers.clearLayers();
+      reps.forEach(r => {
+        const marker = r._marker;
+        if (!marker) return;
+        if (r.modesArray.some(t => repTypeEnabled[t])) {
+          markers.addLayer(marker);
+        }
+      });
+      var el = document.getElementById("active-marker-count");
+      if (el) el.textContent = markers.getLayers().length;
+      if (callsign) searchLayers(callsign);
+      if (coords) {
+        coords = coords.split(",");
+        var position = {
+          coords: {
+            latitude: parseFloat(coords[0]),
+            longitude: parseFloat(coords[1]),
+          },
+        };
+        handlePosition(position, false);
+      }
+    }
+    doAlert();
+  } catch (e) {
+    console.error('Грешка при зареждане на ретранслатори:', e);
+    alert('Неуспешно зареждане на ретранслаторите. Моля, опитайте по-късно.');
+  }
+})();
 
 function addRepeater(r) {
   var title =
@@ -90,6 +204,7 @@ function addRepeater(r) {
     r.qth +
     "</b><br>" +
     (r.echolink ? "Echolink #: <b>" + r.echolink + "</b><br>" : "") +
+  (r.allstarlink ? "AllStarLink Node: <b>" + r.allstarlink + "</b><br>" : "") +
     (r.zello ? "Zello: <b>" + r.zello + "</b><br>" : "") +
     "<hr>" +
     r.infoHTML +
@@ -138,6 +253,7 @@ function addRepeater(r) {
   if (r.modesArray.includes("dstar")) repsDStar += 1;
   if (r.modesArray.includes("dmr")) repsDMR += 1;
   if (r.modesArray.includes("fusion")) repsYSF += 1;
+  if (r.modesArray.includes("nxdn")) repsNXDN += 1;
   if (r.modesArray.includes("parrot")) repsParrot += 1;
   r._marker = marker;
 }
@@ -215,15 +331,10 @@ function generateTerrainProfile(callsign) {
         <a href="${terrainImageUrl}" target="_blank">
           <img src="${terrainImageUrl}"
                alt="${alt}"
+               loading="lazy" decoding="async" referrerpolicy="no-referrer"
                style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
                onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
         </a>
-        <!-- <a href="${terrainImageUrl}&curvature=1" target="_blank">
-          <img src="${terrainImageUrl}&curvature=1"
-               alt="${alt}"
-               style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
-               onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
-        </a> -->
         `;
     }
   } catch (e) {
@@ -242,6 +353,7 @@ const repTypes = [
   { key: "dstar", label: "D-Star", color: "color-rep-dstar" },
   { key: "dmr", label: "DMR", color: "color-rep-dmr" },
   { key: "fusion", label: "Fusion", color: "color-rep-fusion" },
+  { key: "nxdn", label: "NXDN", color: "color-rep-nxdn" },
   { key: "parrot", label: "Parrot", color: "color-rep-parrot" },
 ];
 
@@ -250,6 +362,7 @@ let repTypeEnabled = {
   dstar: true,
   dmr: true,
   fusion: true,
+  nxdn: true,
   parrot: true,
 };
 
@@ -258,6 +371,7 @@ let repMarkersByType = {
   dstar: [],
   dmr: [],
   fusion: [],
+  nxdn: [],
   parrot: [],
 };
 
@@ -359,6 +473,18 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
+              <input type="checkbox" ${repTypeEnabled.nxdn ? "checked" : ""} data-type="nxdn" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-nxdn">NXDN</td>
+            <td align="center"><b class="color-rep-nxdn">${repsNXDN}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('nxdn');" class="csv-button nxdn">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
               <input type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-parrot">Parrot</td>
@@ -408,39 +534,47 @@ function updateFuseSearch() {
 
 function doAlert(force = false) {
   if (location.protocol === "https:" || location.hostname === "localhost") {
-    var a = localStorage.getItem("lastDBUpdate") || "";
+    var lastModified = new Date(document.lastModified);
+    var siteVersion =
+      lastModified.getFullYear() +
+      "-" +
+      ("0" + (lastModified.getMonth() + 1)).slice(-2) +
+      "-" +
+      ("0" + lastModified.getDate()).slice(-2);
 
-    if (a !== repeaters.lastUpdate() || force) {
-      var lastModified = new Date(document.lastModified);
-      lastModified =
-        lastModified.getFullYear() +
-        "-" +
-        ("0" + (lastModified.getMonth() + 1)).slice(-2) +
-        "-" +
-        ("0" + lastModified.getDate()).slice(-2);
+    // Use combined key so the alert appears when either site or DB changes
+    var versionKey = siteVersion + '|' + (dbLastUpdate || '');
+    var stored = localStorage.getItem("lastAlertVersion") || "";
 
+    if (stored !== versionKey || force) {
       var content = "";
-      content += "Последно обновяване на сайта: " + lastModified + "<br>";
+      content += "Последно обновяване на сайта: " + siteVersion + "<br>";
+      if (dbLastUpdate) {
+        content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
+      }
       content +=
-        "Последно обновяване на базата: " + repeaters.lastUpdate() + "<br>";
+        "Източник на данни: <a href='https://api.varna.radio/v1' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
       content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
       content +=
         "За контакт и актуализиране на информация: m (маймунка) mitko (точка) xyz " +
         "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
       content +=
-        "JSON база с ретранслаторите: <a href='https://varna.radio/reps.json' target='_blank'>https://varna.radio/reps.json</a> (<a href='https://varna.radio/reps.js' target='_blank'>JS Библиотека</a>).<br><br>";
-      content +=
         "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
-      content += "Последни промени в базата с репитри:<br>";
-      content += "<textarea style='width: 99%; height: 10rem;'>";
-      for (const [date, arr] of Object.entries(repeaters.changelog())) {
-        content += date + ":\r\n";
-        arr.forEach((l) => {
-          content += "    - " + l + "\r\n";
-        });
-        content += "\r\n";
+
+      if (dbChangelog && typeof dbChangelog === 'object') {
+        content += "Последни промени в базата с репитри:<br>";
+        content += "<textarea style='width: 99%; height: 10rem;'>";
+        for (const [date, arr] of Object.entries(dbChangelog)) {
+          content += date + ":\r\n";
+          (arr || []).forEach((l) => {
+            content += "    - " + l + "\r\n";
+          });
+          content += "\r\n";
+        }
+        content += "</textarea>";
+      } else {
+        content += "<i>Списъкът с промени в базата не е наличен в момента.</i>";
       }
-      content += "</textarea>";
 
       var modal = L.control
         .window(map, {
@@ -449,7 +583,7 @@ function doAlert(force = false) {
         })
         .show();
 
-      localStorage.setItem("lastDBUpdate", repeaters.lastUpdate());
+      localStorage.setItem("lastAlertVersion", versionKey);
     }
   }
 }
@@ -912,6 +1046,32 @@ markers.on("popupopen", function (e) {
         console.debug('Contours unavailable or blocked; suppressing further attempts. First failure at z=' + ev.coords.z + ' x=' + ev.coords.x + ' y=' + ev.coords.y);
       }
       window._contoursSuppressed = true;
+      if (!window._contoursNoteShown) {
+        window._contoursNoteShown = true;
+        try {
+          const note = document.createElement('div');
+          note.id = 'contours-note';
+          note.setAttribute('role', 'status');
+          note.style.cssText = [
+            'position:fixed',
+            'left:12px',
+            'bottom:12px',
+            'z-index:10000',
+            'max-width:84vw',
+            'background:rgba(42,42,45,0.95)',
+            'color:#eee',
+            'padding:8px 12px',
+            'border-radius:6px',
+            'font: 13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
+            'box-shadow:0 2px 10px rgba(0,0,0,0.25)'
+          ].join(';');
+          note.innerHTML = "<strong>Слой с контури не е наличен</strong> — услугата на HeyWhatsThat е временно недостъпна или блокирана. Показваме само основната карта. <a href='https://www.heywhatsthat.com/' target='_blank' style='color:#8ecae6;text-decoration:underline'>Повече</a> <button type='button' aria-label='Затвори' style='margin-left:10px;background:transparent;border:none;color:#aaa;cursor:pointer;font-size:14px'>×</button>";
+          const btn = note.querySelector('button');
+          btn.onclick = () => note.remove();
+          document.body.appendChild(note);
+          setTimeout(() => { try { note.remove(); } catch (_) {} }, 6000);
+        } catch (__) { /* no-op */ }
+      }
       if (window.overlay) {
         try { map.removeLayer(window.overlay); } catch (_) {}
         window.overlay = null;

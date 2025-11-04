@@ -4,6 +4,7 @@
   --rep-dstar: #79f7ae;
   --rep-dmr: #80c1fb;
   --rep-fusion: #ed82ff;
+  --rep-nxdn: #ff9b85;
   --rep-parrot: #ffff7c;
 }
 
@@ -161,6 +162,10 @@ body {
   color: var(--rep-dmr);
 }
 
+.color-rep-nxdn {
+  color: var(--rep-nxdn);
+}
+
 .color-rep-parrot {
   color: var(--rep-parrot);
 }
@@ -193,6 +198,12 @@ body {
   border: 1px solid #6699ff;
   /* border: 1px solid var(--rep-dmr); */
   color: var(--rep-dmr);
+}
+
+.csv-button.nxdn {
+  border: 1px solid #6699ff;
+  /* border: 1px solid var(--rep-nxdn); */
+  color: var(--rep-nxdn);
 }
 
 .csv-button.parrot {
