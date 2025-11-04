@@ -3,48 +3,167 @@ var repsFM = 0;
 var repsDStar = 0;
 var repsDMR = 0;
 var repsYSF = 0;
+var repsNXDN = 0;
 var repsParrot = 0;
 var reps = [];
 var fuseSearch;
+let dbLastUpdate = '';
+let dbChangelog = null;
 
-const repeaters = new Repeaters({
-  warnings: true,
-  debug: true,
-});
+// Feature flags
+// Disable HeyWhatsThat contour tiles overlay by default to avoid API blocking
+// Toggle to true manually in console or code if needed in the future.
+window.LZ_ENABLE_CONTOURS_OVERLAY = false;
 
-repeaters.loadData().then(() => {
-  reps = repeaters.get();
-  if (reps.length) {
-    reps.forEach((r) => {
-      r.shortCallsign = r.callsign.substr(3);
-      addRepeater(r);
-    });
-    addBottomBox();
-    updateFuseSearch();
-    markers.clearLayers();
-    reps.forEach(r => {
-      const marker = r._marker;
-      if (!marker) return;
-      if (r.modesArray.some(t => repTypeEnabled[t])) {
-        markers.addLayer(marker);
-      }
-    });
-    var el = document.getElementById("active-marker-count");
-    if (el) el.textContent = markers.getLayers().length;
-    if (callsign) searchLayers(callsign);
-    if (coords) {
-      coords = coords.split(",");
-      var position = {
-        coords: {
-          latitude: parseFloat(coords[0]),
-          longitude: parseFloat(coords[1]),
-        },
-      };
-      handlePosition(position, false);
-    }
+// Helpers migrated from old reps.js
+function getChannelFromMHz(rxMHz) {
+  const f = parseFloat(rxMHz).toFixed(4) * 10000;
+  let chan = "N/A";
+  if (f >= 1452000 && f < 1454000 && (f - 1452000) % 250 == 0) { // VHF R8-R15
+    chan = 'R' + parseInt(((f - 1452000) / 250) + 8);
+  } else if (f >= 1456000 && f < 1460000 && (f - 1456000) % 250 == 0) { // VHF R0-R7
+    chan = 'R' + parseInt((f - 1456000) / 250);
+  } else if (f >= 4300000 && f < 4400000 && (f - 4300000) % 125 == 0) { // UHF
+    chan = 'RU' + ((f - 4300000) / 125).toFixed(0).padStart(3, '0');
   }
-  doAlert();
-});
+  if (f >= 1450000 && f < 1460000 && (f - 1450000) % 125 == 0)
+    chan = (chan === 'N/A' ? '' : chan + ', ') + 'RV' + ((f - 1450000) / 125).toFixed(0).padStart(2, '0');
+  return chan;
+}
+
+function getFormatedFreqMHz(f) {
+  let fstr = parseFloat(f).toFixed(4).toString();
+  let r = fstr.charAt(fstr.length - 1) === '0' ? parseFloat(f).toFixed(3) : parseFloat(f).toFixed(4);
+  return r;
+}
+
+function mapAPIModesToInternal(modes) {
+  const map = { fm: 'analog', fm_analog: 'analog', analog: 'analog', dmr: 'dmr', dstar: 'dstar', ysf: 'fusion', fusion: 'fusion', parrot: 'parrot', nxdn: 'nxdn' };
+  const out = {};
+  if (modes && typeof modes === 'object') {
+    Object.keys(modes).forEach(k => {
+      if (modes[k]) out[map[k] || k] = true;
+    });
+  }
+  return out;
+}
+
+function mapAPIRepeater(r) {
+  const rxMHz = r && r.freq && r.freq.rx ? (r.freq.rx / 1e6) : undefined;
+  const txMHz = r && r.freq && r.freq.tx ? (r.freq.tx / 1e6) : undefined;
+  const tone = r && r.freq ? (r.freq.tone || r.freq.ctcss || undefined) : undefined;
+  const modeObj = mapAPIModesToInternal(r.modes || {});
+  const modesArray = Object.keys(modeObj).sort();
+  const band = typeof rxMHz === 'number' && !isNaN(rxMHz) ? (rxMHz > 146 ? 'UHF' : 'VHF') : 'VHF';
+  const infoVal = r.info;
+  const infoArr = Array.isArray(infoVal) ? infoVal : (typeof infoVal === 'string' && infoVal !== '' ? [infoVal] : []);
+  const infoHTML = infoArr.join('<br>');
+  const infoString = infoArr.join("\r\n").replace(/<[^>]+>/gm, '');
+  const coverage = r.coverage || r.coverage_map || null;
+  const echolink = r.internet && r.internet.echolink ? r.internet.echolink : (r.echolink || 0);
+  const zello = r.internet && r.internet.zello ? r.internet.zello : (r.zello || null);
+  const allstarlink = r.internet && r.internet.allstarlink ? r.internet.allstarlink : (r.allstarlink || 0);
+  return {
+    callsign: r.callsign,
+    location: (r.place || '') + (r.place_extra ? (' - ' + r.place_extra) : ''),
+    loc: r.place || '',
+    locExtra: r.place_extra || '',
+    info: infoArr,
+    infoHTML,
+    infoString,
+    qth: r.qth || '',
+    keeper: r.keeper || '',
+    altitude: parseInt(r.altitude) || 0,
+    lat: r.latitude,
+    lon: r.longitude,
+    mode: modeObj,
+    modesArray,
+    modesString: modesArray.join(', '),
+    rx: rxMHz !== undefined ? getFormatedFreqMHz(rxMHz) : 0,
+    tx: txMHz !== undefined ? getFormatedFreqMHz(txMHz) : 0,
+    channel: (r && r.freq && r.freq.channel) ? r.freq.channel : (rxMHz !== undefined ? getChannelFromMHz(rxMHz) : 'N/A'),
+    tone: tone,
+    band,
+    coverage: coverage,
+    echolink: echolink,
+    zello: zello,
+    allstarlink: allstarlink,
+  };
+}
+
+const api = new BGRepeaters({ baseURL: 'https://api.varna.radio/v1' });
+
+async function loadFromAPI() {
+  // API no longer requires filters; fetch full list
+  const list = await api.getRepeaters();
+  return (list || []).filter(r => !r.disabled).map(mapAPIRepeater);
+}
+
+(async function initLoad() {
+  try {
+    reps = await loadFromAPI();
+    // Populate changelog using library’s endpoint shape: { lastChanged, changes: [{date, who, info}] }
+    try {
+      const cl = await api.getChangelog();
+      if (cl && typeof cl === 'object') {
+        const grouped = {};
+        const arr = Array.isArray(cl.changes) ? cl.changes : [];
+        arr.forEach(item => {
+          const dateKey = item && item.date ? String(item.date).slice(0, 10) : '';
+          if (!dateKey) return;
+          const who = item.who ? String(item.who) : '';
+          const info = item.info ? String(item.info) : '';
+          const line = [info, who].filter(Boolean).join(' — ');
+          if (!grouped[dateKey]) grouped[dateKey] = [];
+          grouped[dateKey].push(line || JSON.stringify(item));
+        });
+        // Order keys desc
+        const ordered = {};
+        Object.keys(grouped)
+          .sort((a, b) => (a > b ? -1 : a < b ? 1 : 0))
+          .forEach(k => { ordered[k] = grouped[k]; });
+        dbChangelog = ordered;
+        dbLastUpdate = (cl.lastChanged ? String(cl.lastChanged).slice(0, 10) : (Object.keys(ordered)[0] || ''));
+      }
+    } catch (e) {
+      console.warn('Failed to obtain changelog from API:', e);
+    }
+
+    if (reps.length) {
+      reps.forEach((r) => {
+        r.shortCallsign = r.callsign.substr(3);
+        addRepeater(r);
+      });
+      addBottomBox();
+      updateFuseSearch();
+      markers.clearLayers();
+      reps.forEach(r => {
+        const marker = r._marker;
+        if (!marker) return;
+        if (r.modesArray.some(t => repTypeEnabled[t])) {
+          markers.addLayer(marker);
+        }
+      });
+      var el = document.getElementById("active-marker-count");
+      if (el) el.textContent = markers.getLayers().length;
+      if (callsign) searchLayers(callsign);
+      if (coords) {
+        coords = coords.split(",");
+        var position = {
+          coords: {
+            latitude: parseFloat(coords[0]),
+            longitude: parseFloat(coords[1]),
+          },
+        };
+        handlePosition(position, false);
+      }
+    }
+    doAlert();
+  } catch (e) {
+    console.error('Грешка при зареждане на ретранслатори:', e);
+    alert('Неуспешно зареждане на ретранслаторите. Моля, опитайте по-късно.');
+  }
+})();
 
 function addRepeater(r) {
   var title =
@@ -61,7 +180,16 @@ function addRepeater(r) {
     "<b>" +
     r.location +
     "</b>" +
-    "</div><hr>" +
+    "</div>" +
+    "<div style='width: 100%; text-align: center;'>" +
+    '<button class="terrain-profile-button" title="Генерирай профил на терена" onClick="generateTerrainProfile(\'' + r.callsign + '\')">' +
+    'Генерирай профил на терена' +
+    '<span class="small-br">от тук до поставеното габърче</span>' +
+    '</button>' +
+    "<div id='terrain-profile-" + r.callsign + "' style='width: 100%; text-align: center;'>" +
+    "</div>" +
+    "</div>" +
+    "<hr>" +
     "RX: <b>" +
     r.rx +
     "</b> MHz<br>" +
@@ -81,6 +209,7 @@ function addRepeater(r) {
     r.qth +
     "</b><br>" +
     (r.echolink ? "Echolink #: <b>" + r.echolink + "</b><br>" : "") +
+  (r.allstarlink ? "AllStarLink Node: <b>" + r.allstarlink + "</b><br>" : "") +
     (r.zello ? "Zello: <b>" + r.zello + "</b><br>" : "") +
     "<hr>" +
     r.infoHTML +
@@ -100,15 +229,15 @@ function addRepeater(r) {
         r.band +
         '">' +
         r.modesArray
-        .map(
-          (m) =>
-          '<span class="modes-text color-rep-' +
-          m +
-          '">' +
-          m.toUpperCase() +
-          "</span>"
-        )
-        .join("<br>"),
+          .map(
+            (m) =>
+              '<span class="modes-text color-rep-' +
+              m +
+              '">' +
+              m.toUpperCase() +
+              "</span>"
+          )
+          .join("<br>"),
       className: "modes",
     }),
   });
@@ -129,8 +258,99 @@ function addRepeater(r) {
   if (r.modesArray.includes("dstar")) repsDStar += 1;
   if (r.modesArray.includes("dmr")) repsDMR += 1;
   if (r.modesArray.includes("fusion")) repsYSF += 1;
+  if (r.modesArray.includes("nxdn")) repsNXDN += 1;
   if (r.modesArray.includes("parrot")) repsParrot += 1;
   r._marker = marker;
+}
+
+function generateTerrainProfile(callsign) {
+  const rep = reps.find(r => r.callsign === callsign);
+  if (!rep) {
+    alert('Не е намерен репитър: ' + callsign);
+    return;
+  }
+  
+  const pinCoords = {
+    lat: draggablePin.getLatLng().lat,
+    lon: draggablePin.getLatLng().lng,
+  };
+
+  const _terrainButtons = Array.from(document.querySelectorAll('.terrain-profile-button'));
+  _terrainButtons.forEach(b => b.disabled = true);
+
+  const container = document.getElementById('terrain-profile-' + callsign);
+  if (container) {
+    container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.lat.toFixed(4) + ', ' + rep.lon.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
+  }
+
+  // Helper: build HeyWhatsThat.com terrain profile image URL
+  // https://www.heywhatsthat.com/techfaq.html#profiler_api
+  function getTerrainProfileImage(node1, node2) {
+    // Line colour and marker colours (hex without #)
+    const lineColour = 'FF0000';
+    const node1MarkerColour = 'FF3366';
+    const node2MarkerColour = 'FF3366';
+
+    // Coordinates
+    const node1Latitude = node1.lat;
+    const node1Longitude = node1.lon;
+    const node2Latitude = node2.lat;
+    const node2Longitude = node2.lon;
+
+    // Elevations (meters MSL) if available; otherwise leave blank per API
+    const node1ElevationMSL = (rep.altitude ? rep.altitude : '');
+    const node2ElevationMSL = '';
+
+    // Attribution source domain
+    // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
+    const websiteDomain = 'lz.free.bg';
+
+    const params = new URLSearchParams({
+      src: websiteDomain,
+      axes: 1,      // include grid and scale
+      metric: 1,    // metric units
+      curvature: 1, // do not include earth curvature line
+      greatcircle: 1, // use great circle path
+      refraction: '', // default refraction
+      exaggeration: '', // default exaggeration
+      groundrelative: '',
+      los: 1,
+      freq: parseInt(rep.rx, 10), // no frequency line
+      width: 1600,
+      height: 500,
+      pt0: `${node1Latitude},${node1Longitude},${lineColour},${node1ElevationMSL},${node1MarkerColour}`,
+      pt1: `${node2Latitude},${node2Longitude},${lineColour},${node2ElevationMSL},${node2MarkerColour}`,
+    });
+
+    // return 'http://profile.heywhatsthat.com/bin/profile.cgi?' + params.toString();
+    return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
+  }
+
+  // Build and inject the image
+  try {
+    const terrainImageUrl = getTerrainProfileImage({ lat: rep.lat, lon: rep.lon }, pinCoords);
+    if (container) {
+      const alt = `Профил на терена между ${callsign} и габърчето`;
+      container.innerHTML = `
+        <div class="text-muted small" style="margin: 0.25rem 0 0.5rem 0;">Изображение от <a href="http://www.heywhatsthat.com" target="_blank">HeyWhatsThat.com</a></div>
+        <a href="${terrainImageUrl}" target="_blank">
+          <img src="${terrainImageUrl}"
+               alt="${alt}"
+               loading="lazy" decoding="async" referrerpolicy="no-referrer"
+               style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
+               onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
+        </a>
+        `;
+    }
+  } catch (e) {
+    if (container) {
+      container.innerHTML = '<div class="text-danger">Възникна грешка при генериране на профила на терена.</div>';
+    }
+    console.error('Грешка при генериране на профила на терена:', e);
+  } finally {
+    // Re-enable when this function finishes (end of current call stack)
+    setTimeout(() => _terrainButtons.forEach(b => b.disabled = false), 500);
+  }
 }
 
 const repTypes = [
@@ -138,6 +358,7 @@ const repTypes = [
   { key: "dstar", label: "D-Star", color: "color-rep-dstar" },
   { key: "dmr", label: "DMR", color: "color-rep-dmr" },
   { key: "fusion", label: "Fusion", color: "color-rep-fusion" },
+  { key: "nxdn", label: "NXDN", color: "color-rep-nxdn" },
   { key: "parrot", label: "Parrot", color: "color-rep-parrot" },
 ];
 
@@ -146,6 +367,7 @@ let repTypeEnabled = {
   dstar: true,
   dmr: true,
   fusion: true,
+  nxdn: true,
   parrot: true,
 };
 
@@ -154,6 +376,7 @@ let repMarkersByType = {
   dstar: [],
   dmr: [],
   fusion: [],
+  nxdn: [],
   parrot: [],
 };
 
@@ -255,6 +478,18 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
+              <input type="checkbox" ${repTypeEnabled.nxdn ? "checked" : ""} data-type="nxdn" onchange="onRepTypeFilterChange(event)">
+            </td>
+            <td class="color-rep-nxdn">NXDN</td>
+            <td align="center"><b class="color-rep-nxdn">${repsNXDN}</b></td>
+            <td align="right">
+              <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('nxdn');" class="csv-button nxdn">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
               <input type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
             </td>
             <td class="color-rep-parrot">Parrot</td>
@@ -272,11 +507,11 @@ function addBottomBox() {
   box.addTo(map);
 }
 
-window.toggleFoldablePanel = function(panelDiv) {
+window.toggleFoldablePanel = function (panelDiv) {
   panelDiv.classList.toggle("folded");
 };
 
-window.onRepTypeFilterChange = function(e) {
+window.onRepTypeFilterChange = function (e) {
   const type = e.target.getAttribute("data-type");
   repTypeEnabled[type] = e.target.checked;
   saveRepTypeEnabled();
@@ -304,39 +539,47 @@ function updateFuseSearch() {
 
 function doAlert(force = false) {
   if (location.protocol === "https:" || location.hostname === "localhost") {
-    var a = localStorage.getItem("lastDBUpdate") || "";
+    var lastModified = new Date(document.lastModified);
+    var siteVersion =
+      lastModified.getFullYear() +
+      "-" +
+      ("0" + (lastModified.getMonth() + 1)).slice(-2) +
+      "-" +
+      ("0" + lastModified.getDate()).slice(-2);
 
-    if (a !== repeaters.lastUpdate() || force) {
-      var lastModified = new Date(document.lastModified);
-      lastModified =
-        lastModified.getFullYear() +
-        "-" +
-        ("0" + (lastModified.getMonth() + 1)).slice(-2) +
-        "-" +
-        ("0" + lastModified.getDate()).slice(-2);
+    // Use combined key so the alert appears when either site or DB changes
+    var versionKey = siteVersion + '|' + (dbLastUpdate || '');
+    var stored = localStorage.getItem("lastAlertVersion") || "";
 
+    if (stored !== versionKey || force) {
       var content = "";
-      content += "Последно обновяване на сайта: " + lastModified + "<br>";
+      content += "Последно обновяване на сайта: " + siteVersion + "<br>";
+      if (dbLastUpdate) {
+        content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
+      }
       content +=
-        "Последно обновяване на базата: " + repeaters.lastUpdate() + "<br>";
+        "Източник на данни: <a href='https://api.varna.radio/v1' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
       content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
       content +=
         "За контакт и актуализиране на информация: m (маймунка) mitko (точка) xyz " +
         "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
       content +=
-        "JSON база с ретранслаторите: <a href='https://varna.radio/reps.json' target='_blank'>https://varna.radio/reps.json</a> (<a href='https://varna.radio/reps.js' target='_blank'>JS Библиотека</a>).<br><br>";
-      content +=
         "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
-      content += "Последни промени в базата с репитри:<br>";
-      content += "<textarea style='width: 99%; height: 10rem;'>";
-      for (const [date, arr] of Object.entries(repeaters.changelog())) {
-        content += date + ":\r\n";
-        arr.forEach((l) => {
-          content += "    - " + l + "\r\n";
-        });
-        content += "\r\n";
+
+      if (dbChangelog && typeof dbChangelog === 'object') {
+        content += "Последни промени в базата с репитри:<br>";
+        content += "<textarea style='width: 99%; height: 10rem;'>";
+        for (const [date, arr] of Object.entries(dbChangelog)) {
+          content += date + ":\r\n";
+          (arr || []).forEach((l) => {
+            content += "    - " + l + "\r\n";
+          });
+          content += "\r\n";
+        }
+        content += "</textarea>";
+      } else {
+        content += "<i>Списъкът с промени в базата не е наличен в момента.</i>";
       }
-      content += "</textarea>";
 
       var modal = L.control
         .window(map, {
@@ -345,7 +588,7 @@ function doAlert(force = false) {
         })
         .show();
 
-      localStorage.setItem("lastDBUpdate", repeaters.lastUpdate());
+      localStorage.setItem("lastAlertVersion", versionKey);
     }
   }
 }
@@ -368,15 +611,15 @@ function downloadCSV(mode) {
       byteOrderMark,
       encoding
     } =
-    typeof opts === "string" ? {
+      typeof opts === "string" ? {
         mimeType: opts,
       } :
-      opts;
+        opts;
 
     const data =
       encoding !== void 0 ?
-      new TextEncoder(encoding).encode([rawData]) :
-      rawData;
+        new TextEncoder(encoding).encode([rawData]) :
+        rawData;
     const blobData = byteOrderMark !== void 0 ? [byteOrderMark, data] : [data];
     const blob = new Blob(blobData, {
       type: mimeType || "application/octet-stream",
@@ -454,45 +697,45 @@ function downloadCSV(mode) {
     bom: true,
     record_delimiter: '\r\n',
     columns: [{
-        key: "index",
-        header: "Location",
-      },
-      {
-        key: "callsign",
-        header: "Name",
-      },
-      {
-        key: "rx",
-        header: "Frequency",
-      },
-      {
-        key: "duplex",
-        header: "Duplex",
-      },
-      {
-        key: "offset",
-        header: "Offset",
-      },
-      {
-        key: "tone",
-        header: "Tone",
-      },
-      {
-        key: "csvTone",
-        header: "rToneFreq",
-      },
-      {
-        key: "csvTone",
-        header: "cToneFreq",
-      },
-      {
-        key: "csvMode",
-        header: "Mode",
-      },
-      {
-        key: "comment",
-        header: "Comment",
-      },
+      key: "index",
+      header: "Location",
+    },
+    {
+      key: "callsign",
+      header: "Name",
+    },
+    {
+      key: "rx",
+      header: "Frequency",
+    },
+    {
+      key: "duplex",
+      header: "Duplex",
+    },
+    {
+      key: "offset",
+      header: "Offset",
+    },
+    {
+      key: "tone",
+      header: "Tone",
+    },
+    {
+      key: "csvTone",
+      header: "rToneFreq",
+    },
+    {
+      key: "csvTone",
+      header: "cToneFreq",
+    },
+    {
+      key: "csvMode",
+      header: "Mode",
+    },
+    {
+      key: "comment",
+      header: "Comment",
+    },
     ],
     cast: {
       object: (val, ctx) => {
@@ -573,16 +816,16 @@ map.setMinZoom(map.getBoundsZoom(expandedBounds));
 
 var geoButton = L.easyButton({
   states: [{
-      stateName: "default",
-      icon: "fa-map-marker",
-      onClick: getLocation,
-      title: "Покажи репитрите около мен",
-    },
-    {
-      stateName: "wait",
-      icon: "fa fa-spinner fa-spin",
-      title: "Покажи репитрите около мен",
-    },
+    stateName: "default",
+    icon: "fa-map-marker",
+    onClick: getLocation,
+    title: "Покажи репитрите около мен",
+  },
+  {
+    stateName: "wait",
+    icon: "fa fa-spinner fa-spin",
+    title: "Покажи репитрите около мен",
+  },
   ],
 }).addTo(map);
 
@@ -650,10 +893,10 @@ var draggablePin = L.marker(
   new L.LatLng(
     localStorage.getItem("lastPinLat") || 42.779,
     localStorage.getItem("lastPinLon") || 28.356), {
-    draggable: true,
-    icon: PinIcon,
-    zIndexOffset: 500,
-  }
+  draggable: true,
+  icon: PinIcon,
+  zIndexOffset: 500,
+}
 ).addTo(map);
 
 draggablePin.bindPopup(
@@ -709,6 +952,46 @@ function doOverlay(image, LatStart, LngStart, LatEnd, LngEnd) {
   }
 }
 
+// Create a HeyWhatsThat contour tile overlay as a Leaflet TileLayer
+function createContoursOverlay(options = {}) {
+  // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
+  const websiteDomain = 'lz.free.bg';
+  const color = options.color || '83422580'; // semi-transparent brown (RRGGBBAA)
+
+  function defaultIntervalForZoom(z) {
+    // Per docs: minimums (m): 0-4:200, 5-7:80, 8:40, 9:20, 10-13:8, 14:4, 15:2, 16+:0.8
+    // Use ~4x minimum as a safe, visually reasonable default.
+    let min;
+    if (z <= 4) min = 200;
+    else if (z <= 7) min = 80;
+    else if (z === 8) min = 40;
+    else if (z === 9) min = 20;
+    else if (z <= 13) min = 8;
+    else if (z === 14) min = 4;
+    else if (z === 15) min = 2;
+    else min = 0.8;
+    const val = Math.max(1, Math.round(min * 4));
+    return options.interval || val;
+  }
+
+  const layer = L.tileLayer('', {
+    pane: 'general',
+    opacity: 1,
+    tileSize: 256,
+    attribution: 'Contours © HeyWhatsThat.com',
+  });
+
+  layer.getTileUrl = function (coords) {
+    const z = coords.z;
+    const interval = defaultIntervalForZoom(z);
+    const x = coords.x;
+    const y = coords.y;
+    return `https://contour.heywhatsthat.com/bin/contour_tiles.cgi?zoom=${z}&x=${x}&y=${y}&color=${color}&interval=${interval}&src=${encodeURIComponent(websiteDomain)}`;
+  };
+
+  return layer;
+}
+
 function removeOverlay() {
   if (sidebarActive !== true && activeForNearbyNodes !== true) {
     if (window.overlay) {
@@ -742,6 +1025,66 @@ markers.on("popupopen", function (e) {
       // p.target.closePopup();
       removeOverlay();
       // console.log(p.target)
+    });
+
+    markers.removeLayer(m);
+    out.addLayer(m);
+    m.openPopup();
+    map.addLayer(overlay);
+    window.overlay = overlay;
+  } else {
+    // No RF coverage image available; fall back to HeyWhatsThat contour tiles overlay
+    if (!window.LZ_ENABLE_CONTOURS_OVERLAY) {
+      // Contours overlay globally disabled
+      return;
+    }
+    if (window._contoursSuppressed) {
+      return; // Avoid repeated attempts if previously blocked/failed
+    }
+    var overlay = createContoursOverlay({});
+    const m = e.popup._source;
+
+    // Ensure overlay is cleaned up if the marker is removed
+    m.on("remove", function (p) {
+      removeOverlay();
+    });
+
+    // If tiles fail to load (blocked or server error), remove the overlay to avoid repeated errors
+    overlay.on('tileerror', function(ev) {
+      if (!window._contoursSuppressed) {
+        console.debug('Contours unavailable or blocked; suppressing further attempts. First failure at z=' + ev.coords.z + ' x=' + ev.coords.x + ' y=' + ev.coords.y);
+      }
+      window._contoursSuppressed = true;
+      if (!window._contoursNoteShown) {
+        window._contoursNoteShown = true;
+        try {
+          const note = document.createElement('div');
+          note.id = 'contours-note';
+          note.setAttribute('role', 'status');
+          note.style.cssText = [
+            'position:fixed',
+            'left:12px',
+            'bottom:12px',
+            'z-index:10000',
+            'max-width:84vw',
+            'background:rgba(42,42,45,0.95)',
+            'color:#eee',
+            'padding:8px 12px',
+            'border-radius:6px',
+            'font: 13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
+            'box-shadow:0 2px 10px rgba(0,0,0,0.25)'
+          ].join(';');
+          note.innerHTML = "<strong>Слой с контури не е наличен</strong> — услугата на HeyWhatsThat е временно недостъпна или блокирана. Показваме само основната карта. <a href='https://www.heywhatsthat.com/' target='_blank' style='color:#8ecae6;text-decoration:underline'>Повече</a> <button type='button' aria-label='Затвори' style='margin-left:10px;background:transparent;border:none;color:#aaa;cursor:pointer;font-size:14px'>×</button>";
+          const btn = note.querySelector('button');
+          btn.onclick = () => note.remove();
+          document.body.appendChild(note);
+          setTimeout(() => { try { note.remove(); } catch (_) {} }, 6000);
+        } catch (__) { /* no-op */ }
+      }
+      if (window.overlay) {
+        try { map.removeLayer(window.overlay); } catch (_) {}
+        window.overlay = null;
+      }
     });
 
     markers.removeLayer(m);
@@ -930,16 +1273,16 @@ function handlePosition(position, fromPin) {
     locDesc = closestPoints[i].layer.options.title;
     locDesc = locDesc.substring(locDesc.indexOf(" - ") + 2);
     distance =
-        closestPoints[i].layer
-            .getLatLng()
-            .distanceTo(currentPosition)
-            .toFixed(0) / 1000;
+      closestPoints[i].layer
+        .getLatLng()
+        .distanceTo(currentPosition)
+        .toFixed(0) / 1000;
 
     let rep = reps.find(r => r.callsign === closestPoints[i].layer.name);
 
     let modeLabel = rep.modesArray.map(m => {
-        let t = repTypes.find(rt => rt.key === m);
-        return t ? t.label : m.toUpperCase();
+      let t = repTypes.find(rt => rt.key === m);
+      return t ? t.label : m.toUpperCase();
     }).join("+");
 
     let modesSup = `
@@ -952,7 +1295,7 @@ function handlePosition(position, fromPin) {
         >${modeLabel}</span>
     `;
 
-    window.handleLayerClick = function(layerName) {
+    window.handleLayerClick = function (layerName) {
       if (window.overlay) {
         map.removeLayer(overlay);
       }
@@ -960,7 +1303,7 @@ function handlePosition(position, fromPin) {
       map.closePopup();
       searchLayers(layerName);
     };
-    
+
     nodesList +=
       c +
       `. <a href='#' onclick='handleLayerClick("${closestPoints[i].layer.name}")'><b>` +
@@ -1053,7 +1396,7 @@ function handlePosition(position, fromPin) {
     function attachCopyHandler() {
       const btn = document.getElementById('copy-link-btn');
       if (btn) {
-        btn.onclick = function(e) {
+        btn.onclick = function (e) {
           e.preventDefault();
           const url = location.origin + location.pathname + '?coords=' +
             position.coords.latitude.toFixed(5) + ',' +
@@ -1117,7 +1460,7 @@ searchbox.onInput("keyup", function (e) {
       var results = fuseSearch.search(value);
       formatedResults = results.map(
         (res) =>
-        `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
+          `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
       );
       searchbox.setItems(formatedResults);
     } else {
