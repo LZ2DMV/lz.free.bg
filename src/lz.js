@@ -330,7 +330,7 @@ function generateTerrainProfile(callsign) {
                style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
                onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
         </a>
-        <div class="terrain-profile-credit">Изображение от HeyWhatsThat.com</div>
+        <div class="terrain-profile-credit">Изображение от <a href="https://www.heywhatsthat.com/" target="_blank">HeyWhatsThat.com</a></div>
       `;
     }
   } catch (e) {
@@ -1381,7 +1381,10 @@ function handlePosition(position, fromPin) {
       6
     ).toUpperCase() +
     "</i>" +
-    "<br/><a href='#' id='copy-link-btn' style='text-decoration:none; float: right;'><i class='fa-solid fa-link'></i> Вземи линк</a>";
+    "<br/><div style='display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:4px;'>" +
+    "<a href='#' id='move-pin-btn' style='text-decoration:none;'><img src='img/pin.png' width='24' height='24' style='vertical-align:middle;'> Сложи габърчето тук</a>" +
+    "<a href='#' id='copy-link-btn' style='text-decoration:none; margin-left:12px;'><i class='fa-solid fa-link'></i> Вземи линк</a>" +
+    "</div>";
 
   //if (typeof home == 'undefined') {
   clearHomeIfExists();
@@ -1441,6 +1444,19 @@ function handlePosition(position, fromPin) {
     }
     attachCopyHandler();
   }, 100);
+
+  function attachPinHandler() {
+    const btn = document.getElementById('move-pin-btn');
+    if (btn) {
+      btn.onclick = function(e) {
+        e.preventDefault();
+        draggablePin.setLatLng([position.coords.latitude, position.coords.longitude]);
+        localStorage.setItem("lastPinLat", position.coords.latitude);
+        localStorage.setItem("lastPinLon", position.coords.longitude);
+      };
+    }
+  }
+  attachPinHandler();
 }
 
 function handleError(error) {
