@@ -1380,11 +1380,20 @@ function handlePosition(position, fromPin) {
       parseFloat(position.coords.longitude.toFixed(5)),
       6
     ).toUpperCase() +
-    "</i>" +
-    "<br/><div style='display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:4px;'>" +
-    "<a href='#' id='move-pin-btn' style='text-decoration:none;'><img src='img/pin.png' width='24' height='24' style='vertical-align:middle;'> Сложи габърчето тук</a>" +
-    "<a href='#' id='copy-link-btn' style='text-decoration:none; margin-left:12px;'><i class='fa-solid fa-link'></i> Вземи линк</a>" +
-    "</div>";
+    "</i>";
+
+  if (!fromPin) {
+    nodesList +=
+      "<br/><div style='display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:4px;'>" +
+      "<a href='#' id='move-pin-btn' style='text-decoration:none;'><img src='img/pin.png' width='24' height='24' style='vertical-align:middle;'> Сложи габърчето тук</a>" +
+      "<a href='#' id='copy-link-btn' style='text-decoration:none; margin-left:12px;'><i class='fa-solid fa-link'></i> Вземи линк</a>" +
+      "</div>";
+  } else {
+    nodesList +=
+      "<br/><div style='display:flex; justify-content:flex-end; align-items:center; margin-top:8px; margin-bottom:4px;'>" +
+      "<a href='#' id='copy-link-btn' style='text-decoration:none;'><i class='fa-solid fa-link'></i> Вземи линк</a>" +
+      "</div>";
+  }
 
   //if (typeof home == 'undefined') {
   clearHomeIfExists();
