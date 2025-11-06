@@ -49,8 +49,8 @@ function mapAPIModesToInternal(modes) {
 }
 
 function mapAPIRepeater(r) {
-  const rxMHz = r && r.freq && r.freq.rx ? (r.freq.rx / 1e6) : undefined;
-  const txMHz = r && r.freq && r.freq.tx ? (r.freq.tx / 1e6) : undefined;
+  const rxMHz = r && r.freq && r.freq.tx ? (r.freq.tx / 1e6) : undefined;
+  const txMHz = r && r.freq && r.freq.rx ? (r.freq.rx / 1e6) : undefined;
   const tone = r && r.freq ? (r.freq.tone || r.freq.ctcss || undefined) : undefined;
   const modeObj = mapAPIModesToInternal(r.modes || {});
   const modesArray = Object.keys(modeObj).sort();
@@ -650,11 +650,11 @@ function downloadCSV(mode) {
       if (r.mode.ssb && mode == "analog") show = true;
       return show;
     }).map((r) => {
-      let duplex = r.rx - r.tx < 0 ? "-" : r.rx - r.tx > 0 ? "+" : "";
-      let offset = Math.abs(r.rx - r.tx);
-      if (Math.abs(r.rx - r.tx) > 8) {
+      let duplex = r.tx - r.rx < 0 ? "-" : r.tx - r.rx > 0 ? "+" : "";
+      let offset = Math.abs(r.tx - r.rx);
+      if (Math.abs(r.tx - r.rx) > 8) {
         duplex = "split";
-        offset = r.rx;
+        offset = r.tx;
       }
       let csvTone = r.tone || 79.7;
       let csvMode = r.mode.analog || r.mode.parrot ? "FM" : r.mode.dmr ? "DMR" : "Auto";
@@ -669,7 +669,7 @@ function downloadCSV(mode) {
       return {
         index: 0,
         callsign: r.callsign,
-        rx: r.tx,
+        rx: r.rx,
         duplex: duplex,
         offset: offset,
         tone: r.tone,
@@ -1316,7 +1316,7 @@ function handlePosition(position, fromPin) {
     let modesSup = `
         <span class="rep-modes-sup rotating-info"
             data-mode="${modeLabel}"
-            data-tx="${rep.tx}"
+            data-tx="${rep.rx}"
             data-rx="${rep.rx}"
             data-state="0"
             ${rep.tone ? `data-tone="${rep.tone}"` : ""}
