@@ -38,7 +38,7 @@ function getFormatedFreqMHz(f) {
 }
 
 function mapAPIModesToInternal(modes) {
-  const map = { fm: 'analog', fm_analog: 'analog', analog: 'analog', dmr: 'dmr', dstar: 'dstar', ysf: 'fusion', fusion: 'fusion', parrot: 'parrot', nxdn: 'nxdn' };
+  const map = { fm: 'analog', fm_analog: 'analog', analog: 'analog', usb: 'analog', lsb: 'analog', dmr: 'dmr', dstar: 'dstar', ysf: 'fusion', fusion: 'fusion', parrot: 'parrot', nxdn: 'nxdn' };
   const out = {};
   if (modes && typeof modes === 'object') {
     Object.keys(modes).forEach(k => {
@@ -253,7 +253,7 @@ function addRepeater(r) {
   });
   markers.addLayer(marker);
   repsAll += 1;
-  if (r.modesArray.includes("analog")) repsFM += 1;
+  if (r.modesArray.includes("analog") || r.modesArray.includes("usb") || r.modesArray.includes("lsb")) repsFM += 1;
   if (r.modesArray.includes("dstar")) repsDStar += 1;
   if (r.modesArray.includes("dmr")) repsDMR += 1;
   if (r.modesArray.includes("fusion")) repsYSF += 1;
@@ -343,6 +343,8 @@ function generateTerrainProfile(callsign) {
 
 const repTypes = [
   { key: "analog", label: "Analog/FM", color: "color-rep-analog" },
+  { key: "usb", label: "Analog/USB", color: "color-rep-analog" },
+  { key: "lsb", label: "Analog/LSB", color: "color-rep-analog" },
   { key: "dstar", label: "D-Star", color: "color-rep-dstar" },
   { key: "dmr", label: "DMR", color: "color-rep-dmr" },
   { key: "fusion", label: "Fusion", color: "color-rep-fusion" },
@@ -352,6 +354,8 @@ const repTypes = [
 
 let repTypeEnabled = {
   analog: true,
+  usb: true,
+  lsb: true,
   dstar: true,
   dmr: true,
   fusion: true,
@@ -361,6 +365,8 @@ let repTypeEnabled = {
 
 let repMarkersByType = {
   analog: [],
+  usb: [],
+  lsb: [],
   dstar: [],
   dmr: [],
   fusion: [],
@@ -420,7 +426,7 @@ function addBottomBox() {
             <td>
               <input type="checkbox" ${repTypeEnabled.analog ? "checked" : ""} data-type="analog" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-analog">Analog/FM</td>
+            <td class="color-rep-analog">Analog/FM/USB/LSB</td>
             <td align="center"><b class="color-rep-analog">${repsFM}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('analog');" class="csv-button analog">
@@ -644,11 +650,11 @@ function downloadCSV(mode) {
       if (r.mode.ssb && mode == "analog") show = true;
       return show;
     }).map((r) => {
-      let duplex = r.tx - r.rx < 0 ? "-" : r.tx - r.rx > 0 ? "+" : "";
-      let offset = Math.abs(r.tx - r.rx);
-      if (Math.abs(r.tx - r.rx) > 8) {
+      let duplex = r.rx - r.tx < 0 ? "-" : r.rx - r.tx > 0 ? "+" : "";
+      let offset = Math.abs(r.rx - r.tx);
+      if (Math.abs(r.rx - r.tx) > 8) {
         duplex = "split";
-        offset = r.tx;
+        offset = r.rx;
       }
       let csvTone = r.tone || 79.7;
       let csvMode = r.mode.analog || r.mode.parrot ? "FM" : r.mode.dmr ? "DMR" : "Auto";
@@ -663,7 +669,7 @@ function downloadCSV(mode) {
       return {
         index: 0,
         callsign: r.callsign,
-        rx: r.rx,
+        rx: r.tx,
         duplex: duplex,
         offset: offset,
         tone: r.tone,
