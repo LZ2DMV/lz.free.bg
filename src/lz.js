@@ -1316,7 +1316,7 @@ function handlePosition(position, fromPin) {
     let modesSup = `
         <span class="rep-modes-sup rotating-info"
             data-mode="${modeLabel}"
-            data-tx="${rep.rx}"
+            data-tx="${rep.tx}"
             data-rx="${rep.rx}"
             data-state="0"
             ${rep.tone ? `data-tone="${rep.tone}"` : ""}
