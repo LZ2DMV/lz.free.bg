@@ -40,9 +40,23 @@ function getFormatedFreqMHz(f) {
 function mapAPIModesToInternal(modes) {
   const map = { fm: 'analog', fm_analog: 'analog', analog: 'analog', usb: 'analog', lsb: 'analog', dmr: 'dmr', dstar: 'dstar', ysf: 'fusion', fusion: 'fusion', parrot: 'parrot', nxdn: 'nxdn' };
   const out = {};
+  const isEnabled = (val) => {
+    if (val === undefined || val === null) return false;
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'object') {
+      if (Object.prototype.hasOwnProperty.call(val, 'enabled')) return !!val.enabled;
+      return Object.values(val).some((v) => {
+        if (typeof v === 'boolean') return v;
+        if (typeof v === 'number') return v !== 0;
+        if (typeof v === 'string') return v.trim() !== '';
+        return !!v;
+      });
+    }
+    return !!val;
+  };
   if (modes && typeof modes === 'object') {
     Object.keys(modes).forEach(k => {
-      if (modes[k]) out[map[k] || k] = true;
+      if (isEnabled(modes[k])) out[map[k] || k] = true;
     });
   }
   return out;
@@ -91,7 +105,10 @@ function mapAPIRepeater(r) {
   };
 }
 
-const api = new BGRepeaters({ baseURL: 'https://api.varna.radio/v1' });
+const isLocal = false; //location.hostname === 'localhost';
+const api = new BGRepeaters({
+  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
+});
 
 async function loadFromAPI() {
   // API no longer requires filters; fetch full list
