@@ -79,9 +79,9 @@ function mapAPIRepeater(r) {
   const allstarlink = r.internet && r.internet.allstarlink ? r.internet.allstarlink : (r.allstarlink || 0);
   return {
     callsign: r.callsign,
-    location: (r.place || '') + (r.place_extra ? (' - ' + r.place_extra) : ''),
+    location: (r.place || '') + (r.location ? (' - ' + r.location) : ''),
     loc: r.place || '',
-    locExtra: r.place_extra || '',
+    locExtra: r.location || '',
     info: infoArr,
     infoHTML,
     infoString,
