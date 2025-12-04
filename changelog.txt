@@ -9,7 +9,7 @@
 
 Автор: LZ2DMV
 Доработки: LZ2SLL, LZ1BTO
-JSON база с репитрите: https://varna.radio/reps.json
+JSON база с репитрите: https://api.varna.radio/v1
 --
 
 03.11.2025 (LZ2SLL)
