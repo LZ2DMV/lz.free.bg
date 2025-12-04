@@ -73,7 +73,7 @@ function mapAPIRepeater(r) {
   const infoArr = Array.isArray(infoVal) ? infoVal : (typeof infoVal === 'string' && infoVal !== '' ? [infoVal] : []);
   const infoHTML = infoArr.join('<br>');
   const infoString = infoArr.join("\r\n").replace(/<[^>]+>/gm, '');
-  const coverage = r.coverage || r.coverage_map_json || null;
+  const coverage = r.coverage || (r.coverage_map_json ? JSON.parse(r.coverage_map_json) : null) || null;
   const echolink = r.internet && r.internet.echolink ? r.internet.echolink : (r.echolink || 0);
   const zello = r.internet && r.internet.zello ? r.internet.zello : (r.zello || null);
   const allstarlink = r.internet && r.internet.allstarlink ? r.internet.allstarlink : (r.allstarlink || 0);
