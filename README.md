@@ -6,8 +6,9 @@ Interactive map of the Bulgarian VHF and UHF amateur radio repeaters based on [O
 
 Data source and client library
 
-- Production data is served from the public API at <https://api.varna.radio/v1>
+- Production data is served from the public API at <https://api.varna.radio/>
 - The site consumes the API via the client library loaded from <https://api.varna.radio/bgreps.js>
+- There is WEB interface to the repeaters DB at <https://repeaters.varna.radio>
 - The app does not ship its own data; no data changes should be made in this repository. Please use the contact methods on the site for content updates.
 
 Development notes

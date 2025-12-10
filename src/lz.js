@@ -15,6 +15,65 @@ let dbChangelog = null;
 // Toggle to true manually in console or code if needed in the future.
 window.LZ_ENABLE_CONTOURS_OVERLAY = false;
 
+let siteChangelogText = '';
+let siteChangelogError = null;
+let siteChangelogPromise = null;
+
+const isLocal = (typeof window !== 'undefined' && typeof window.isLocal === 'boolean')
+  ? window.isLocal
+  : ['localhost', '127.0.0.1'].includes(location.hostname);
+window.isLocal = isLocal;
+const api = new BGRepeaters({
+  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
+});
+
+function escapeTextBlock(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function fetchSiteChangelog() {
+  if (siteChangelogPromise) return siteChangelogPromise;
+  if (typeof fetch !== 'function') {
+    siteChangelogError = new Error('fetch unavailable in this browser');
+    return Promise.resolve('');
+  }
+  // const changelogUrl = isLocal ? 'changelog.txt' : 'https://lz.free.bg/changelog.txt';
+  const changelogUrl = 'changelog.txt';
+  siteChangelogPromise = fetch(changelogUrl, { cache: 'no-store' })
+    .then((resp) => {
+      if (!resp.ok) throw new Error('Failed to load changelog (' + resp.status + ')');
+      return resp.text();
+    })
+    .then((text) => {
+      siteChangelogText = text;
+      return text;
+    })
+    .catch((err) => {
+      siteChangelogError = err;
+      console.warn('Неуспешно зареждане на changelog.txt', err);
+      return '';
+    });
+  return siteChangelogPromise;
+}
+
+function getSiteChangelogMarkup() {
+  if (siteChangelogText && siteChangelogText.trim().length) {
+    return `<textarea style='width: 99%; height: 12rem;'>${escapeTextBlock(siteChangelogText)}</textarea>`;
+  }
+  if (siteChangelogError) {
+    return "<i>Историята на сайта не може да бъде заредена в момента.</i>";
+  }
+  return "<i>Зареждане на историята на сайта...</i>";
+}
+
+fetchSiteChangelog();
+
 // Helpers migrated from old reps.js
 function getChannelFromMHz(rxMHz) {
   const f = parseFloat(rxMHz).toFixed(4) * 10000;
@@ -37,83 +96,105 @@ function getFormatedFreqMHz(f) {
   return r;
 }
 
-function mapAPIModesToInternal(modes) {
-  const map = { fm: 'analog', fm_analog: 'analog', analog: 'analog', usb: 'analog', lsb: 'analog', dmr: 'dmr', dstar: 'dstar', ysf: 'fusion', fusion: 'fusion', parrot: 'parrot', nxdn: 'nxdn' };
-  const out = {};
-  const isEnabled = (val) => {
-    if (val === undefined || val === null) return false;
-    if (typeof val === 'boolean') return val;
-    if (typeof val === 'object') {
-      if (Object.prototype.hasOwnProperty.call(val, 'enabled')) return !!val.enabled;
-      return Object.values(val).some((v) => {
-        if (typeof v === 'boolean') return v;
-        if (typeof v === 'number') return v !== 0;
-        if (typeof v === 'string') return v.trim() !== '';
-        return !!v;
-      });
-    }
-    return !!val;
-  };
-  if (modes && typeof modes === 'object') {
-    Object.keys(modes).forEach(k => {
-      if (isEnabled(modes[k])) out[map[k] || k] = true;
+function isModeEnabled(val) {
+  if (val === undefined || val === null) return false;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'object') {
+    if (Object.prototype.hasOwnProperty.call(val, 'enabled')) return !!val.enabled;
+    return Object.values(val).some((v) => {
+      if (typeof v === 'boolean') return v;
+      if (typeof v === 'number') return v !== 0;
+      if (typeof v === 'string') return v.trim() !== '';
+      return !!v;
     });
   }
-  return out;
+  return !!val;
 }
 
-function mapAPIRepeater(r) {
-  const rxMHz = r && r.freq && r.freq.tx ? (r.freq.tx / 1e6) : undefined;
-  const txMHz = r && r.freq && r.freq.rx ? (r.freq.rx / 1e6) : undefined;
-  const tone = r && r.freq ? (r.freq.tone || r.freq.ctcss || undefined) : undefined;
-  const modeObj = mapAPIModesToInternal(r.modes || {});
-  const modesArray = Object.keys(modeObj).sort();
+const MODE_KEY_DEFS = {
+  fm: ['analog'],
+  am: ['analog'],
+  usb: ['analog', 'usb'],
+  lsb: ['analog', 'lsb'],
+  dmr: ['dmr'],
+  dstar: ['dstar'],
+  fusion: ['fusion'],
+  ysf: ['fusion'],
+  parrot: ['parrot'],
+  nxdn: ['nxdn'],
+};
+
+function collectModeKeys(modes) {
+  const keys = new Set();
+  if (modes && typeof modes === 'object') {
+    Object.keys(modes).forEach((k) => {
+      if (!isModeEnabled(modes[k])) return;
+      const mapped = MODE_KEY_DEFS[k] || [k];
+      mapped.forEach((value) => keys.add(value));
+    });
+  }
+  return Array.from(keys).sort();
+}
+
+function parseInfoList(value) {
+  if (Array.isArray(value)) return value.filter((line) => typeof line === 'string' && line.trim().length);
+  if (typeof value === 'string' && value.trim() !== '') return [value.trim()];
+  return [];
+}
+
+function safeParseCoverage(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('Invalid coverage_map_json payload, ignoring entry');
+    return null;
+  }
+}
+
+function buildLocationLabel(place, exactLocation) {
+  const base = place || '';
+  if (base && exactLocation) return `${base} - ${exactLocation}`;
+  return base || exactLocation || '';
+}
+
+function decorateRepeater(r) {
+  const rxMHz = (r && r.freq && typeof r.freq.tx === 'number') ? (r.freq.tx / 1e6) : undefined;
+  const txMHz = (r && r.freq && typeof r.freq.rx === 'number') ? (r.freq.rx / 1e6) : undefined;
+  const tone = r && r.freq ? (typeof r.freq.tone === 'number' ? r.freq.tone : r.freq.ctcss) : undefined;
+  const infoList = parseInfoList(r.info);
+  const infoHTML = infoList.join('<br>');
+  const infoString = infoList.join("\r\n").replace(/<[^>]+>/gm, '');
+  const modesArray = collectModeKeys(r.modes || {});
   const band = typeof rxMHz === 'number' && !isNaN(rxMHz) ? (rxMHz > 146 ? 'UHF' : 'VHF') : 'VHF';
-  const infoVal = r.info;
-  const infoArr = Array.isArray(infoVal) ? infoVal : (typeof infoVal === 'string' && infoVal !== '' ? [infoVal] : []);
-  const infoHTML = infoArr.join('<br>');
-  const infoString = infoArr.join("\r\n").replace(/<[^>]+>/gm, '');
-  const coverage = r.coverage || (r.coverage_map_json ? JSON.parse(r.coverage_map_json) : null) || null;
-  const echolink = r.internet && r.internet.echolink ? r.internet.echolink : (r.echolink || 0);
-  const zello = r.internet && r.internet.zello ? r.internet.zello : (r.zello || null);
-  const allstarlink = r.internet && r.internet.allstarlink ? r.internet.allstarlink : (r.allstarlink || 0);
-  return {
-    callsign: r.callsign,
-    location: (r.place || '') + (r.location ? (' - ' + r.location) : ''),
-    loc: r.place || '',
-    locExtra: r.location || '',
-    info: infoArr,
+  const coverage = r.coverage || safeParseCoverage(r.coverage_map_json) || null;
+  const channel = (r && r.freq && r.freq.channel) ? r.freq.channel : (typeof rxMHz === 'number' ? getChannelFromMHz(rxMHz) : 'N/A');
+  const locationLabel = buildLocationLabel(r.place, r.location);
+
+  Object.assign(r, {
+    infoList,
     infoHTML,
     infoString,
-    qth: r.qth || '',
-    keeper: r.keeper || '',
-    altitude: parseInt(r.altitude) || 0,
-    lat: r.latitude,
-    lon: r.longitude,
-    mode: modeObj,
-    modesArray,
-    modesString: modesArray.join(', '),
-    rx: rxMHz !== undefined ? getFormatedFreqMHz(rxMHz) : 0,
-    tx: txMHz !== undefined ? getFormatedFreqMHz(txMHz) : 0,
-    channel: (r && r.freq && r.freq.channel) ? r.freq.channel : (rxMHz !== undefined ? getChannelFromMHz(rxMHz) : 'N/A'),
-    tone: tone,
+    rxMHz,
+    txMHz,
+    rx: typeof rxMHz === 'number' ? getFormatedFreqMHz(rxMHz) : '0.000',
+    tx: typeof txMHz === 'number' ? getFormatedFreqMHz(txMHz) : '0.000',
+    tone: typeof tone === 'number' && tone > 0 ? tone : undefined,
     band,
-    coverage: coverage,
-    echolink: echolink,
-    zello: zello,
-    allstarlink: allstarlink,
-  };
-}
+    coverage,
+    channel,
+    modesArray,
+    modesString: modesArray.length ? modesArray.join(', ') : '—',
+    locationLabel,
+  });
 
-const isLocal = false; //location.hostname === 'localhost';
-const api = new BGRepeaters({
-  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
-});
+  return r;
+}
 
 async function loadFromAPI() {
   // API no longer requires filters; fetch full list
   const list = await api.getRepeaters();
-  return (list || []).filter(r => !r.disabled).map(mapAPIRepeater);
+  return (list || []).filter(r => !r.disabled).map(decorateRepeater);
 }
 
 (async function initLoad() {
@@ -183,6 +264,7 @@ async function loadFromAPI() {
 })();
 
 function addRepeater(r) {
+  const net = r.internet || {};
   var terrainProfileLink =
     '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
     `<a href="#" class="terrain-profile-link" title="Генерирай профил на терена" onclick="generateTerrainProfile('${r.callsign}');return false;">Генерирай профил на терена</a>` +
@@ -202,7 +284,7 @@ function addRepeater(r) {
     "</a></h2 > " +
     '<div class="title-links">' +
     "<b>" +
-    r.location +
+    r.locationLabel +
     "</b>" +
     "</div>" +
     terrainProfileLink +
@@ -225,15 +307,15 @@ function addRepeater(r) {
     "QTH: <b>" +
     r.qth +
     "</b><br>" +
-    (r.echolink ? "Echolink #: <b>" + r.echolink + "</b><br>" : "") +
-    (r.allstarlink ? "AllStarLink Node: <b>" + r.allstarlink + "</b><br>" : "") +
-    (r.zello ? "Zello: <b>" + r.zello + "</b><br>" : "") +
+    (net.echolink ? "Echolink #: <b>" + net.echolink + "</b><br>" : "") +
+    (net.allstarlink ? "AllStarLink Node: <b>" + net.allstarlink + "</b><br>" : "") +
+    (net.zello ? "Zello: <b>" + net.zello + "</b><br>" : "") +
     "<hr>" +
     r.infoHTML +
     "</div>";
 
-  var marker = L.marker(new L.LatLng(r.lat, r.lon), {
-    title: r.callsign + " - " + r.loc,
+  var marker = L.marker(new L.LatLng(r.latitude, r.longitude), {
+    title: r.callsign + " - " + (r.place || ''),
     icon: L.divIcon({
       html: '<i class="fa-solid fa-arrow-up pointer"></i>' +
         "<center>" +
@@ -300,7 +382,7 @@ function generateTerrainProfile(callsign) {
       if (link) link.style.display = 'none';
       if (comment) comment.style.display = 'none';
     }
-    container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.lat.toFixed(4) + ', ' + rep.lon.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
+    container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.latitude.toFixed(4) + ', ' + rep.longitude.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
   }
 
   function getTerrainProfileImage(node1, node2) {
@@ -336,7 +418,7 @@ function generateTerrainProfile(callsign) {
   }
 
   try {
-    const terrainImageUrl = getTerrainProfileImage({ lat: rep.lat, lon: rep.lon }, pinCoords);
+    const terrainImageUrl = getTerrainProfileImage({ lat: rep.latitude, lon: rep.longitude }, pinCoords);
     if (container) {
       const alt = `Профил на терена между ${callsign} и габърчето`;
       container.innerHTML = `
@@ -540,7 +622,7 @@ window.onRepTypeFilterChange = function (e) {
 
 function updateFuseSearch() {
   fuseSearch = new Fuse(reps, {
-    keys: ["shortCallsign", "callsign", "loc", "locExtra", "rx", "tx", "channel"],
+    keys: ["shortCallsign", "callsign", "place", "location", "rx", "tx", "channel"],
     shouldSort: true,
     threshold: 0.0,
     location: 0,
@@ -548,241 +630,79 @@ function updateFuseSearch() {
   });
 }
 
-function doAlert(force = false) {
-  if (location.protocol === "https:" || location.hostname === "localhost") {
-    var lastModified = new Date(document.lastModified);
-    var siteVersion =
-      lastModified.getFullYear() +
-      "-" +
-      ("0" + (lastModified.getMonth() + 1)).slice(-2) +
-      "-" +
-      ("0" + lastModified.getDate()).slice(-2);
-
-    // Use combined key so the alert appears when either site or DB changes
-    var versionKey = siteVersion + '|' + (dbLastUpdate || '');
-    var stored = localStorage.getItem("lastAlertVersion") || "";
-
-    if (stored !== versionKey || force) {
-      var content = "";
-      content += "Последно обновяване на сайта: " + siteVersion + "<br>";
-      if (dbLastUpdate) {
-        content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
-      }
-      content +=
-        "Източник на данни: <a href='https://api.varna.radio/v1' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
-      content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
-      content +=
-        "За контакт и актуализиране на информация: m (маймунка) mitko (точка) xyz " +
-        "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
-      content +=
-        "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
-
-      if (dbChangelog && typeof dbChangelog === 'object') {
-        content += "Последни промени в базата с репитри:<br>";
-        content += "<textarea style='width: 99%; height: 10rem;'>";
-        for (const [date, arr] of Object.entries(dbChangelog)) {
-          content += date + ":\r\n";
-          (arr || []).forEach((l) => {
-            content += "    - " + l + "\r\n";
-          });
-          content += "\r\n";
-        }
-        content += "</textarea>";
-      } else {
-        content += "<i>Списъкът с промени в базата не е наличен в момента.</i>";
-      }
-
-      var modal = L.control
-        .window(map, {
-          title: "Добре дошли!",
-          content: content,
-        })
-        .show();
-
-      localStorage.setItem("lastAlertVersion", versionKey);
+async function doAlert(force = false) {
+  if (!siteChangelogPromise && typeof fetch === 'function') {
+    fetchSiteChangelog();
+  }
+  if (siteChangelogPromise) {
+    try {
+      await siteChangelogPromise;
+    } catch (err) {
+      // handled via siteChangelogError
     }
+  }
+  var lastModified = new Date(document.lastModified);
+  var siteVersion =
+    lastModified.getFullYear() +
+    "-" +
+    ("0" + (lastModified.getMonth() + 1)).slice(-2) +
+    "-" +
+    ("0" + lastModified.getDate()).slice(-2);
+
+  // Use combined key so the alert appears when either site or DB changes
+  var versionKey = siteVersion + '|' + (dbLastUpdate || '');
+  var stored = localStorage.getItem("lastAlertVersion") || "";
+
+  if (stored !== versionKey || force) {
+    var content = "";
+    content += "Последно обновяване на сайта: " + siteVersion + "<br>";
+    if (dbLastUpdate) {
+      content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
+    }
+    content +=
+      "Източник на данни: <a href='https://api.varna.radio' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
+    content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
+    content +=
+      "За контакт и актуализиране на информация: m (маймунка) mitko (точка) xyz " +
+      "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
+    content +=
+      "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
+
+    if (dbChangelog && typeof dbChangelog === 'object') {
+      content += "Последни промени в базата с репитри:<br>";
+      content += "<textarea style='width: 99%; height: 10rem;'>";
+      for (const [date, arr] of Object.entries(dbChangelog)) {
+        content += date + ":\r\n";
+        (arr || []).forEach((l) => {
+          content += "    - " + l + "\r\n";
+        });
+        content += "\r\n";
+      }
+      content += "</textarea>";
+    } else {
+      content += "<i>Списъкът с промени в базата не е наличен в момента.</i>";
+    }
+
+    content += "<br>История на промените (сайт):<br>" + getSiteChangelogMarkup();
+
+    var modal = L.control
+      .window(map, {
+        title: "Добре дошли!",
+        content: content,
+      })
+      .show();
+
+    localStorage.setItem("lastAlertVersion", versionKey);
   }
 }
 
-function downloadCSV(mode) {
-  var fn = "CHIRP_repeaters_" + mode + ".csv";
-
-  function exportFile(fileName, rawData, opts = {}) {
-    function clean(link) {
-      // allow time for iOS
-      setTimeout(() => {
-        window.URL.revokeObjectURL(link.href);
-      }, 10000);
-
-      link.remove();
-    }
-
-    const {
-      mimeType,
-      byteOrderMark,
-      encoding
-    } =
-      typeof opts === "string" ? {
-        mimeType: opts,
-      } :
-        opts;
-
-    const data =
-      encoding !== void 0 ?
-        new TextEncoder(encoding).encode([rawData]) :
-        rawData;
-    const blobData = byteOrderMark !== void 0 ? [byteOrderMark, data] : [data];
-    const blob = new Blob(blobData, {
-      type: mimeType || "application/octet-stream",
-    });
-    const link = document.createElement("a");
-
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute("download", fileName);
-
-    // Check for "download" attribute support;
-    // If not supported, open this in new window
-    if (typeof link.download === "undefined") {
-      link.setAttribute("target", "_blank");
-    }
-
-    link.classList.add("hidden");
-    link.style.position = "fixed"; // avoid scrolling to bottom
-    document.body.appendChild(link);
-
-    try {
-      link.click();
-      clean(link);
-      return true;
-    } catch (err) {
-      clean(link);
-      return err;
-    }
+async function downloadCSV(mode) {
+  try {
+    await api.downloadChirpCsv({ mode });
+  } catch (err) {
+    console.error('Неуспешно генериране на CSV файл:', err);
+    alert('Неуспешно генериране на CSV файл. Моля, опитайте отново.');
   }
-
-  function filterRepeaters(reps) {
-    var filtered = reps.filter((r) => {
-      var show = false;
-      if (mode === "all" || r.mode[mode]) show = true;
-      if (r.mode.ssb && mode == "analog") show = true;
-      return show;
-    }).map((r) => {
-      let duplex = r.tx - r.rx < 0 ? "-" : r.tx - r.rx > 0 ? "+" : "";
-      let offset = Math.abs(r.tx - r.rx);
-      if (Math.abs(r.tx - r.rx) > 8) {
-        duplex = "split";
-        offset = r.tx;
-      }
-      let csvTone = r.tone || 79.7;
-      let csvMode = r.mode.analog || r.mode.parrot ? "FM" : r.mode.dmr ? "DMR" : "Auto";
-      let comment =
-        (r.channel !== "N/A" ? "Chan: " + r.channel + "\r\n" : "") +
-        "Modes: " +
-        r.modesArray.join("+") +
-        "\r\n" +
-        r.location +
-        "\r\n" +
-        r.infoString;
-      return {
-        index: 0,
-        callsign: r.callsign,
-        rx: r.rx,
-        duplex: duplex,
-        offset: offset,
-        tone: r.tone,
-        csvTone: csvTone,
-        csvMode: csvMode,
-        comment: comment,
-      };
-    });
-
-    filtered.forEach((r, idx) => {
-      r.index = idx;
-    });
-
-    return filtered;
-  }
-
-  var output = csv_stringify_sync.stringify(filterRepeaters(reps), {
-    header: true,
-    bom: true,
-    record_delimiter: '\r\n',
-    columns: [{
-      key: "index",
-      header: "Location",
-    },
-    {
-      key: "callsign",
-      header: "Name",
-    },
-    {
-      key: "rx",
-      header: "Frequency",
-    },
-    {
-      key: "duplex",
-      header: "Duplex",
-    },
-    {
-      key: "offset",
-      header: "Offset",
-    },
-    {
-      key: "tone",
-      header: "Tone",
-    },
-    {
-      key: "csvTone",
-      header: "rToneFreq",
-    },
-    {
-      key: "csvTone",
-      header: "cToneFreq",
-    },
-    {
-      key: "csvMode",
-      header: "Mode",
-    },
-    {
-      key: "comment",
-      header: "Comment",
-    },
-    ],
-    cast: {
-      object: (val, ctx) => {
-        if (ctx.column == "mode") {
-          return {
-            value: "FM",
-          };
-        }
-      },
-      number: (val, ctx) => {
-        if (ctx.column === "index")
-          return {
-            value: "" + parseInt(val),
-          };
-        if (ctx.column === "tone" || ctx.column === "csvTone") {
-          if (ctx.index == 5) {
-            return {
-              value: val ? "TSQL" : "",
-            };
-          }
-          if (ctx.index == 6 || ctx.index == 7) {
-            return {
-              value: val ? val.toFixed(1) : parseFloat("79.7").toFixed(1),
-            };
-          }
-        }
-        return {
-          value: val.toFixed(6),
-        };
-      },
-      string: (val, ctx) => {
-        return (ctx.column === "comment") ? val.replace(/\r?\n/g, ', ').replace(/,?\s*$/, '') : val;
-      },
-    },
-  });
-  const status = exportFile(fn, output, "text/csv");
 }
 
 sidebarActive = false;
@@ -839,15 +759,6 @@ var geoButton = L.easyButton({
   },
   ],
 }).addTo(map);
-
-L.easyButton(
-  "fa-history",
-  function () {
-    window.open("changelog.txt", "_blank", "width=600, height=300");
-    doAlert(true);
-  },
-  "История на промените"
-).addTo(map);
 
 L.easyButton(
   "fa-info",
@@ -1530,7 +1441,7 @@ searchbox.onInput("keyup", function (e) {
       var results = fuseSearch.search(value);
       formatedResults = results.map(
         (res) =>
-          `📡 | ${res.item.callsign} | ${res.item.loc} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
+          `📡 | ${res.item.callsign} | ${res.item.place || ''} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
       );
       searchbox.setItems(formatedResults);
     } else {
