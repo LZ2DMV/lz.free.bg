@@ -19,6 +19,14 @@ let siteChangelogText = '';
 let siteChangelogError = null;
 let siteChangelogPromise = null;
 
+const isLocal = (typeof window !== 'undefined' && typeof window.isLocal === 'boolean')
+  ? window.isLocal
+  : ['localhost', '127.0.0.1'].includes(location.hostname);
+window.isLocal = isLocal;
+const api = new BGRepeaters({
+  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
+});
+
 function escapeTextBlock(value) {
   if (typeof value !== 'string') return '';
   return value
@@ -35,9 +43,11 @@ function fetchSiteChangelog() {
     siteChangelogError = new Error('fetch unavailable in this browser');
     return Promise.resolve('');
   }
-  siteChangelogPromise = fetch('changelog.txt', { cache: 'no-store' })
+  // const changelogUrl = isLocal ? 'changelog.txt' : 'https://lz.free.bg/changelog.txt';
+  const changelogUrl = 'changelog.txt';
+  siteChangelogPromise = fetch(changelogUrl, { cache: 'no-store' })
     .then((resp) => {
-      if (!resp.ok) throw new Error('Failed to load changelog.txt (' + resp.status + ')');
+      if (!resp.ok) throw new Error('Failed to load changelog (' + resp.status + ')');
       return resp.text();
     })
     .then((text) => {
@@ -180,12 +190,6 @@ function decorateRepeater(r) {
 
   return r;
 }
-
-// const isLocal = false
-const isLocal = location.hostname === 'localhost';
-const api = new BGRepeaters({
-  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
-});
 
 async function loadFromAPI() {
   // API no longer requires filters; fetch full list
@@ -637,60 +641,58 @@ async function doAlert(force = false) {
       // handled via siteChangelogError
     }
   }
-  if (location.protocol === "https:" || location.hostname === "localhost") {
-    var lastModified = new Date(document.lastModified);
-    var siteVersion =
-      lastModified.getFullYear() +
-      "-" +
-      ("0" + (lastModified.getMonth() + 1)).slice(-2) +
-      "-" +
-      ("0" + lastModified.getDate()).slice(-2);
+  var lastModified = new Date(document.lastModified);
+  var siteVersion =
+    lastModified.getFullYear() +
+    "-" +
+    ("0" + (lastModified.getMonth() + 1)).slice(-2) +
+    "-" +
+    ("0" + lastModified.getDate()).slice(-2);
 
-    // Use combined key so the alert appears when either site or DB changes
-    var versionKey = siteVersion + '|' + (dbLastUpdate || '');
-    var stored = localStorage.getItem("lastAlertVersion") || "";
+  // Use combined key so the alert appears when either site or DB changes
+  var versionKey = siteVersion + '|' + (dbLastUpdate || '');
+  var stored = localStorage.getItem("lastAlertVersion") || "";
 
-    if (stored !== versionKey || force) {
-      var content = "";
-      content += "Последно обновяване на сайта: " + siteVersion + "<br>";
-      if (dbLastUpdate) {
-        content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
-      }
-      content +=
-        "Източник на данни: <a href='https://api.varna.radio' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
-      content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
-      content +=
-        "За контакт и актуализиране на информация: m (маймунка) mitko (точка) xyz " +
-        "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
-      content +=
-        "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
-
-      if (dbChangelog && typeof dbChangelog === 'object') {
-        content += "Последни промени в базата с репитри:<br>";
-        content += "<textarea style='width: 99%; height: 10rem;'>";
-        for (const [date, arr] of Object.entries(dbChangelog)) {
-          content += date + ":\r\n";
-          (arr || []).forEach((l) => {
-            content += "    - " + l + "\r\n";
-          });
-          content += "\r\n";
-        }
-        content += "</textarea>";
-      } else {
-        content += "<i>Списъкът с промени в базата не е наличен в момента.</i>";
-      }
-
-      content += "<br>История на промените (сайт):<br>" + getSiteChangelogMarkup();
-
-      var modal = L.control
-        .window(map, {
-          title: "Добре дошли!",
-          content: content,
-        })
-        .show();
-
-      localStorage.setItem("lastAlertVersion", versionKey);
+  if (stored !== versionKey || force) {
+    var content = "";
+    content += "Последно обновяване на сайта: " + siteVersion + "<br>";
+    if (dbLastUpdate) {
+      content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
     }
+    content +=
+      "Източник на данни: <a href='https://api.varna.radio' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
+    content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
+    content +=
+      "За контакт и актуализиране на информация: m (маймунка) mitko (точка) xyz " +
+      "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
+    content +=
+      "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
+
+    if (dbChangelog && typeof dbChangelog === 'object') {
+      content += "Последни промени в базата с репитри:<br>";
+      content += "<textarea style='width: 99%; height: 10rem;'>";
+      for (const [date, arr] of Object.entries(dbChangelog)) {
+        content += date + ":\r\n";
+        (arr || []).forEach((l) => {
+          content += "    - " + l + "\r\n";
+        });
+        content += "\r\n";
+      }
+      content += "</textarea>";
+    } else {
+      content += "<i>Списъкът с промени в базата не е наличен в момента.</i>";
+    }
+
+    content += "<br>История на промените (сайт):<br>" + getSiteChangelogMarkup();
+
+    var modal = L.control
+      .window(map, {
+        title: "Добре дошли!",
+        content: content,
+      })
+      .show();
+
+    localStorage.setItem("lastAlertVersion", versionKey);
   }
 }
 

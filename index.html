@@ -47,9 +47,24 @@ JS библиотека: https://api.varna.radio/bgreps.js
 <body>
   <div id="map"></div>
   <div id="sidebar"></div>
-  <!-- <script src="https://api.varna.radio/bgreps.js"></script> -->
-  <script src="http://localhost:8787/bgreps.js"></script>
-  <script src="src/lz.js"></script>
+  <script>
+    // window.isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+    window.isLocal = false;
+    (function loadClients() {
+      var client = document.createElement('script');
+      client.src = window.isLocal ? 'http://localhost:8787/bgreps.js' : 'https://api.varna.radio/bgreps.js';
+      client.async = false;
+      client.onload = function () {
+        var lz = document.createElement('script');
+        lz.src = 'src/lz.js';
+        document.body.appendChild(lz);
+      };
+      client.onerror = function () {
+        console.error('Неуспешно зареждане на bgreps.js');
+      };
+      document.body.appendChild(client);
+    })();
+  </script>
 </body>
 
 </html>
