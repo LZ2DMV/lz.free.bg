@@ -105,7 +105,8 @@ function mapAPIRepeater(r) {
   };
 }
 
-const isLocal = false; //location.hostname === 'localhost';
+// const isLocal = false
+const isLocal = location.hostname === 'localhost';
 const api = new BGRepeaters({
   baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
 });
@@ -604,185 +605,13 @@ function doAlert(force = false) {
   }
 }
 
-function downloadCSV(mode) {
-  var fn = "CHIRP_repeaters_" + mode + ".csv";
-
-  function exportFile(fileName, rawData, opts = {}) {
-    function clean(link) {
-      // allow time for iOS
-      setTimeout(() => {
-        window.URL.revokeObjectURL(link.href);
-      }, 10000);
-
-      link.remove();
-    }
-
-    const {
-      mimeType,
-      byteOrderMark,
-      encoding
-    } =
-      typeof opts === "string" ? {
-        mimeType: opts,
-      } :
-        opts;
-
-    const data =
-      encoding !== void 0 ?
-        new TextEncoder(encoding).encode([rawData]) :
-        rawData;
-    const blobData = byteOrderMark !== void 0 ? [byteOrderMark, data] : [data];
-    const blob = new Blob(blobData, {
-      type: mimeType || "application/octet-stream",
-    });
-    const link = document.createElement("a");
-
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute("download", fileName);
-
-    // Check for "download" attribute support;
-    // If not supported, open this in new window
-    if (typeof link.download === "undefined") {
-      link.setAttribute("target", "_blank");
-    }
-
-    link.classList.add("hidden");
-    link.style.position = "fixed"; // avoid scrolling to bottom
-    document.body.appendChild(link);
-
-    try {
-      link.click();
-      clean(link);
-      return true;
-    } catch (err) {
-      clean(link);
-      return err;
-    }
+async function downloadCSV(mode) {
+  try {
+    await api.downloadChirpCsv({ mode });
+  } catch (err) {
+    console.error('Неуспешно генериране на CSV файл:', err);
+    alert('Неуспешно генериране на CSV файл. Моля, опитайте отново.');
   }
-
-  function filterRepeaters(reps) {
-    var filtered = reps.filter((r) => {
-      var show = false;
-      if (mode === "all" || r.mode[mode]) show = true;
-      if (r.mode.ssb && mode == "analog") show = true;
-      return show;
-    }).map((r) => {
-      let duplex = r.tx - r.rx < 0 ? "-" : r.tx - r.rx > 0 ? "+" : "";
-      let offset = Math.abs(r.tx - r.rx);
-      if (Math.abs(r.tx - r.rx) > 8) {
-        duplex = "split";
-        offset = r.tx;
-      }
-      let csvTone = r.tone || 79.7;
-      let csvMode = r.mode.analog || r.mode.parrot ? "FM" : r.mode.dmr ? "DMR" : "Auto";
-      let comment =
-        (r.channel !== "N/A" ? "Chan: " + r.channel + "\r\n" : "") +
-        "Modes: " +
-        r.modesArray.join("+") +
-        "\r\n" +
-        r.location +
-        "\r\n" +
-        r.infoString;
-      return {
-        index: 0,
-        callsign: r.callsign,
-        rx: r.rx,
-        duplex: duplex,
-        offset: offset,
-        tone: r.tone,
-        csvTone: csvTone,
-        csvMode: csvMode,
-        comment: comment,
-      };
-    });
-
-    filtered.forEach((r, idx) => {
-      r.index = idx;
-    });
-
-    return filtered;
-  }
-
-  var output = csv_stringify_sync.stringify(filterRepeaters(reps), {
-    header: true,
-    bom: true,
-    record_delimiter: '\r\n',
-    columns: [{
-      key: "index",
-      header: "Location",
-    },
-    {
-      key: "callsign",
-      header: "Name",
-    },
-    {
-      key: "rx",
-      header: "Frequency",
-    },
-    {
-      key: "duplex",
-      header: "Duplex",
-    },
-    {
-      key: "offset",
-      header: "Offset",
-    },
-    {
-      key: "tone",
-      header: "Tone",
-    },
-    {
-      key: "csvTone",
-      header: "rToneFreq",
-    },
-    {
-      key: "csvTone",
-      header: "cToneFreq",
-    },
-    {
-      key: "csvMode",
-      header: "Mode",
-    },
-    {
-      key: "comment",
-      header: "Comment",
-    },
-    ],
-    cast: {
-      object: (val, ctx) => {
-        if (ctx.column == "mode") {
-          return {
-            value: "FM",
-          };
-        }
-      },
-      number: (val, ctx) => {
-        if (ctx.column === "index")
-          return {
-            value: "" + parseInt(val),
-          };
-        if (ctx.column === "tone" || ctx.column === "csvTone") {
-          if (ctx.index == 5) {
-            return {
-              value: val ? "TSQL" : "",
-            };
-          }
-          if (ctx.index == 6 || ctx.index == 7) {
-            return {
-              value: val ? val.toFixed(1) : parseFloat("79.7").toFixed(1),
-            };
-          }
-        }
-        return {
-          value: val.toFixed(6),
-        };
-      },
-      string: (val, ctx) => {
-        return (ctx.column === "comment") ? val.replace(/\r?\n/g, ', ').replace(/,?\s*$/, '') : val;
-      },
-    },
-  });
-  const status = exportFile(fn, output, "text/csv");
 }
 
 sidebarActive = false;
