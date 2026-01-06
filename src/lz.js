@@ -274,8 +274,13 @@ function addRepeater(r) {
 
   var title =
     '<div class="reptitle">' +
-    '<div style="float: left">' +
+    '<div style="float: left; display: flex; align-items: center; gap: 0.5em;">' +
     '<a href="#" class="remove-for-sidebar" title="Отвори в странична лента" onclick="setSidebar();"><i class="fa-solid fa-window-restore"></i></a>' +
+    '<a href="https://repeaters.varna.radio/#/request?callsign=' +
+      encodeURIComponent(r.callsign) +
+      '" target="_blank" title="Редактирай информацията за този репитър" style="margin-left:2px;">' +
+      '<i class="fa-solid fa-pencil-alt" style="color: #444444; opacity: 0.92;"></i>' +
+    '</a>' +
     "</div>" +
     '<h2><a href = "?callsign=' +
     r.callsign +
@@ -1159,6 +1164,10 @@ function setSidebar() {
         comment.style.textAlign = 'left';
         comment.style.marginTop = '2px';
       }
+    }
+    var pencil = reptitle.querySelector('a[href^="https://repeaters.varna.radio/#/request?callsign="]');
+    if (pencil) {
+      pencil.parentNode.removeChild(pencil);
     }
   }
   var result = reptitle ? reptitle.innerHTML : '';
