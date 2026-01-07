@@ -274,7 +274,7 @@ function addRepeater(r) {
 
   var title =
     '<div class="reptitle">' +
-    '<div style="float: left; display: flex; align-items: center; gap: 0.5em;">' +
+    '<div style="float: left; position: absolute; display: flex; align-items: center; gap: 0.5em;">' +
     '<a href="#" class="remove-for-sidebar" title="Отвори в странична лента" onclick="setSidebar();"><i class="fa-solid fa-window-restore"></i></a>' +
     '<a href="https://repeaters.varna.radio/#/request?callsign=' +
       encodeURIComponent(r.callsign) +
