@@ -767,19 +767,19 @@ var geoButton = L.easyButton({
 }).addTo(map);
 
 L.easyButton(
-  "fa-info",
-  function () {
-    doAlert(true);
-  },
-  "Информация"
-).addTo(map);
-
-L.easyButton(
   "fa-th",
   function () {
     window.open('https://repeaters.varna.radio/', '_blank');
   },
   "Таблица с репитри, добавяне на нов репитър"
+).addTo(map);
+
+L.easyButton(
+  "fa-info",
+  function () {
+    doAlert(true);
+  },
+  "Информация"
 ).addTo(map);
 
 var sidebar = L.control.sidebar("sidebar", {
