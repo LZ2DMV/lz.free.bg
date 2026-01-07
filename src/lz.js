@@ -668,8 +668,8 @@ async function doAlert(force = false) {
       "Източник на данни: <a href='https://api.varna.radio' target='_blank'>API</a> (<a href='https://api.varna.radio/bgreps.js' target='_blank'>JS библиотека</a>).<br><br>";
     content += "Картата се поддържа и разработва от Димитър, LZ2DMV.<br>";
     content +=
-      "За актуализиране на информацията, отворете желания репитър на картата и изберете иконката с моливчето от горния ляв ъгъл. За добавяне на нов репитър, следвайте стъпките <a href='https://repeaters.varna.radio/#/request' target='_blank'>тук</a>."
-    content +="За контакт с администраторите: m (маймунка) mitko (точка) xyz (за LZ2DMV)" +
+      "За актуализиране на информацията, отворете желания репитър на картата и изберете иконката с моливчето от горния ляв ъгъл. За добавяне на нов репитър, следвайте стъпките <a href='https://repeaters.varna.radio/#/request' target='_blank'>тук</a>.<br>"
+    content +="За контакт с администраторите: m (маймунка) mitko (точка) xyz (за LZ2DMV) " +
       "или <a href='https://0xaf.org/about/' target='_blank'>LZ2SLL</a>.<br>";
     content +=
       "Забележка: Приемната (RX) и предавателната (TX) честота на всички ретранслатори са посочени от перспективата на вашето радио, а не от тази на ретранслатора!<br><br>";
@@ -772,6 +772,14 @@ L.easyButton(
     doAlert(true);
   },
   "Информация"
+).addTo(map);
+
+L.easyButton(
+  "fa-th",
+  function () {
+    window.open('https://repeaters.varna.radio/', '_blank');
+  },
+  "Таблица с репитри, добавяне на нов репитър"
 ).addTo(map);
 
 var sidebar = L.control.sidebar("sidebar", {
