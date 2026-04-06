@@ -70,9 +70,8 @@ function getSiteChangelogMarkup() {
 fetchSiteChangelog();
 
 function getFormatedFreqMHz(f) {
-  let fstr = parseFloat(f).toFixed(4).toString();
-  let r = fstr.charAt(fstr.length - 1) === '0' ? parseFloat(f).toFixed(3) : parseFloat(f).toFixed(4);
-  return r;
+  const parsed = parseFloat(f);
+  return parsed.toFixed(4).endsWith('0') ? parsed.toFixed(3) : parsed.toFixed(4);
 }
 
 function isModeEnabled(val) {
@@ -217,16 +216,7 @@ async function loadFromAPI() {
       });
       addBottomBox();
       updateFuseSearch();
-      markers.clearLayers();
-      reps.forEach(r => {
-        const marker = r._marker;
-        if (!marker) return;
-        if (r.modesArray.some(t => repTypeEnabled[t])) {
-          markers.addLayer(marker);
-        }
-      });
-      var el = document.getElementById("active-marker-count");
-      if (el) el.textContent = markers.getLayers().length;
+      refreshMarkers();
       if (callsign) searchLayers(callsign);
       if (coords) {
         coords = coords.split(",");
@@ -335,9 +325,6 @@ function addRepeater(r) {
   marker.boundary = r.coverage ? r.coverage : null;
   marker.name = r.callsign;
   marker.repTypes = r.modesArray;
-  r.modesArray.forEach(type => {
-    if (repMarkersByType[type]) repMarkersByType[type].push(marker);
-  });
   markers.addLayer(marker);
   repsAll += 1;
   if (r.modesArray.includes("analog") || r.modesArray.includes("usb") || r.modesArray.includes("lsb")) repsFM += 1;
@@ -450,16 +437,6 @@ let repTypeEnabled = {
   parrot: true,
 };
 
-let repMarkersByType = {
-  analog: [],
-  usb: [],
-  lsb: [],
-  dstar: [],
-  dmr: [],
-  fusion: [],
-  nxdn: [],
-  parrot: [],
-};
 
 function loadRepTypeEnabled() {
   try {
@@ -486,6 +463,16 @@ function saveRepTypeEnabled() {
 }
 
 loadRepTypeEnabled();
+
+function refreshMarkers() {
+  markers.clearLayers();
+  reps.forEach(r => {
+    if (r._marker && r.modesArray.some(t => repTypeEnabled[t]))
+      markers.addLayer(r._marker);
+  });
+  const el = document.getElementById("active-marker-count");
+  if (el) el.textContent = markers.getLayers().length;
+}
 
 function addBottomBox() {
   var box = L.control({ position: "bottomright" });
@@ -596,16 +583,7 @@ window.onRepTypeFilterChange = function (e) {
   const type = e.target.getAttribute("data-type");
   repTypeEnabled[type] = e.target.checked;
   saveRepTypeEnabled();
-  markers.clearLayers();
-  reps.forEach(r => {
-    const marker = r._marker;
-    if (!marker) return;
-    if (r.modesArray.some(t => repTypeEnabled[t])) {
-      markers.addLayer(marker);
-    }
-  });
-  var el = document.getElementById("active-marker-count");
-  if (el) el.textContent = markers.getLayers().length;
+  refreshMarkers();
 };
 
 function updateFuseSearch() {
@@ -629,13 +607,7 @@ async function doAlert(force = false) {
       // handled via siteChangelogError
     }
   }
-  var lastModified = new Date(document.lastModified);
-  var siteVersion =
-    lastModified.getFullYear() +
-    "-" +
-    ("0" + (lastModified.getMonth() + 1)).slice(-2) +
-    "-" +
-    ("0" + lastModified.getDate()).slice(-2);
+  var siteVersion = new Date(document.lastModified).toISOString().slice(0, 10);
 
   // Use combined key so the alert appears when either site or DB changes
   var versionKey = siteVersion + '|' + (dbLastUpdate || '');
@@ -694,8 +666,8 @@ async function downloadCSV(mode) {
   }
 }
 
-sidebarActive = false;
-activeForNearbyNodes = false;
+let sidebarActive = false;
+let activeForNearbyNodes = false;
 
 var map = L.map("map", {
   // closePopupOnClick: false
@@ -835,16 +807,7 @@ draggablePin.on("dragend", function () {
       if (cb && !cb.checked) cb.checked = true;
     });
     saveRepTypeEnabled();
-    markers.clearLayers();
-    reps.forEach(r => {
-      const marker = r._marker;
-      if (!marker) return;
-      if (r.modesArray.some(t => repTypeEnabled[t])) {
-        markers.addLayer(marker);
-      }
-    });
-    const el = document.getElementById("active-marker-count");
-    if (el) el.textContent = markers.getLayers().length;
+    refreshMarkers();
   }
   var position = {
     coords: {
@@ -1041,45 +1004,6 @@ markers.on("unspiderfied", function (a) {
   });
 });
 
-// map.on('moveend zoomend', function (e) {
-//   bounds = map.getBounds();
-//   var zoom = map.getZoom();
-//   if (zoom > 16) {
-//     console.log('zoomed enough');
-//     markers.eachLayer(function (layer) {
-//       if (bounds.contains(layer.getLatLng())) {
-//         markersDisplayed = true;
-//         layer.openPopup();
-//         layer.spiderfy();
-//       }
-//     });
-//   } else if (markersDisplayed) {
-//     console.log('zoomed out enough');
-//     markersDisplayed = false;
-//     markers.eachLayer(function (layer) {
-//       if (bounds.contains(layer.getLatLng())) {
-//         layer.closePopup();
-//       }
-//     });
-//   }
-// });
-
-// markers.on('clusterclick', function (e) {
-//   bounds = map.getBounds();
-//   var zoom = map.getZoom();
-//   var childMarkers = e.layer.getAllChildMarkers();
-//   if (zoom > 16) {
-//     console.log('zoomed enough in cluster');
-//     console.log(childMarkers);
-//     childMarkers.forEach(function (layer) {
-//       if (bounds.contains(layer.getLatLng())) {
-//         markersDisplayed = true;
-//         layer.openPopup();
-//       }
-//     });
-//   }
-// });
-
 function searchLayers(name) {
   var found = false;
   let rep = reps.find(r => r.callsign.toUpperCase() === name.toUpperCase());
@@ -1100,16 +1024,7 @@ function searchLayers(name) {
       }
     });
     if (changed) {
-      markers.clearLayers();
-      reps.forEach(r => {
-        const m = r._marker;
-        if (!m) return;
-        if (r.modesArray.some(t => repTypeEnabled[t])) {
-          markers.addLayer(m);
-        }
-      });
-      var el = document.getElementById("active-marker-count");
-      if (el) el.textContent = markers.getLayers().length;
+      refreshMarkers();
     }
   }
 
@@ -1127,9 +1042,12 @@ function searchLayers(name) {
   }
 }
 
+let home;
+
 function clearHomeIfExists() {
-  if (typeof home !== "undefined") {
+  if (home) {
     map.removeLayer(home);
+    home = undefined;
   }
 }
 
@@ -1226,10 +1144,19 @@ function handlePosition(position, fromPin) {
   var nodesList = "<h3>Най-близките ретранслатори до вас:</h3>";
   var c = 1;
 
+  window.handleLayerClick = function (layerName) {
+    if (window.overlay) {
+      map.removeLayer(window.overlay);
+    }
+    window.overlay = null;
+    map.closePopup();
+    searchLayers(layerName);
+  };
+
   for (var i = 0; i < closestPoints.length; i++) {
-    locDesc = closestPoints[i].layer.options.title;
+    let locDesc = closestPoints[i].layer.options.title;
     locDesc = locDesc.substring(locDesc.indexOf(" - ") + 2);
-    distance =
+    const distance =
       closestPoints[i].layer
         .getLatLng()
         .distanceTo(currentPosition)
@@ -1251,15 +1178,6 @@ function handlePosition(position, fromPin) {
             ${rep.tone ? `data-tone="${rep.tone}"` : ""}
         >${modeLabel}</span>
     `;
-
-    window.handleLayerClick = function (layerName) {
-      if (window.overlay) {
-        map.removeLayer(overlay);
-      }
-      window.overlay = null;
-      map.closePopup();
-      searchLayers(layerName);
-    };
 
     nodesList +=
       c +
