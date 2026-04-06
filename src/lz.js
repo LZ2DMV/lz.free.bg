@@ -69,22 +69,6 @@ function getSiteChangelogMarkup() {
 
 fetchSiteChangelog();
 
-// Helpers migrated from old reps.js
-function getChannelFromMHz(rxMHz) {
-  const f = parseFloat(rxMHz).toFixed(4) * 10000;
-  let chan = "N/A";
-  if (f >= 1452000 && f < 1454000 && (f - 1452000) % 250 == 0) { // VHF R8-R15
-    chan = 'R' + parseInt(((f - 1452000) / 250) + 8);
-  } else if (f >= 1456000 && f < 1460000 && (f - 1456000) % 250 == 0) { // VHF R0-R7
-    chan = 'R' + parseInt((f - 1456000) / 250);
-  } else if (f >= 4300000 && f < 4400000 && (f - 4300000) % 125 == 0) { // UHF
-    chan = 'RU' + ((f - 4300000) / 125).toFixed(0).padStart(3, '0');
-  }
-  if (f >= 1450000 && f < 1460000 && (f - 1450000) % 125 == 0)
-    chan = (chan === 'N/A' ? '' : chan + ', ') + 'RV' + ((f - 1450000) / 125).toFixed(0).padStart(2, '0');
-  return chan;
-}
-
 function getFormatedFreqMHz(f) {
   let fstr = parseFloat(f).toFixed(4).toString();
   let r = fstr.charAt(fstr.length - 1) === '0' ? parseFloat(f).toFixed(3) : parseFloat(f).toFixed(4);
@@ -163,7 +147,10 @@ function decorateRepeater(r) {
   const modesArray = collectModeKeys(r.modes || {});
   const band = typeof rxMHz === 'number' && !isNaN(rxMHz) ? (rxMHz > 146 ? 'UHF' : 'VHF') : 'VHF';
   const coverage = r.coverage || safeParseCoverage(r.coverage_map_json) || null;
-  const channel = (r && r.freq && r.freq.channel) ? r.freq.channel : (typeof rxMHz === 'number' ? getChannelFromMHz(rxMHz) : 'N/A');
+  const channel = r && r.freq && r.freq.channel !== undefined && r.freq.channel !== null
+    ? String(r.freq.channel).trim()
+    : '';
+  const qth = typeof r.qth === 'string' && r.qth.trim().length ? r.qth.trim() : 'N/A';
   const locationLabel = buildLocationLabel(r.place, r.location);
 
   Object.assign(r, {
@@ -178,6 +165,7 @@ function decorateRepeater(r) {
     band,
     coverage,
     channel,
+    qth,
     modesArray,
     modesString: modesArray.length ? modesArray.join(', ') : '—',
     locationLabel,
@@ -1321,12 +1309,6 @@ function handlePosition(position, fromPin) {
     position.coords.latitude.toFixed(5) +
     ", " +
     position.coords.longitude.toFixed(5) +
-    "<br/>QTH локатор: " +
-    L.Maidenhead.latLngToIndex(
-      parseFloat(position.coords.latitude.toFixed(5)),
-      parseFloat(position.coords.longitude.toFixed(5)),
-      6
-    ).toUpperCase() +
     "</i>";
 
   if (!fromPin) {
