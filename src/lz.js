@@ -19,12 +19,8 @@ let siteChangelogText = '';
 let siteChangelogError = null;
 let siteChangelogPromise = null;
 
-const isLocal = (typeof window !== 'undefined' && typeof window.isLocal === 'boolean')
-  ? window.isLocal
-  : ['localhost', '127.0.0.1'].includes(location.hostname);
-window.isLocal = isLocal;
 const api = new BGRepeaters({
-  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
+  baseURL: window.localApi ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
 });
 
 function escapeTextBlock(value) {
@@ -43,7 +39,6 @@ function fetchSiteChangelog() {
     siteChangelogError = new Error('fetch unavailable in this browser');
     return Promise.resolve('');
   }
-  // const changelogUrl = isLocal ? 'changelog.txt' : 'https://lz.free.bg/changelog.txt';
   const changelogUrl = 'changelog.txt';
   siteChangelogPromise = fetch(changelogUrl, { cache: 'no-store' })
     .then((resp) => {
