@@ -305,6 +305,7 @@ function addRepeater(r) {
     "Отговорник: <b>" +
     r.keeper +
     "</b><br>" +
+    (Number(r.power) > 0 ? "Мощност: <b>" + Number(r.power) + "</b> W<br>" : "") +
     (r.altitude ? "Надморска височина: <b>" + r.altitude + "</b> м<br>" : "") +
     "QTH: <b>" +
     r.qth +
@@ -771,12 +772,7 @@ var draggablePin = L.marker(
 }
 ).addTo(map);
 
-draggablePin.bindPopup(
-  "<p>Влачи това габърче до мястото," +
-  " за което искаш да видиш най-близките ретранслатори наоколо.</p>"
-);
-
-draggablePin.on("dragend", function () {
+function ensureAtLeastOneRepTypeSelected() {
   // LZ2DMV: If the pin is dragged, but we have no markers on the map due to the filtering
   // of repeater types, we need to enable all repeater types, so that the markers are displayed.
   const allTypes = Object.keys(repTypeEnabled);
@@ -790,13 +786,112 @@ draggablePin.on("dragend", function () {
     saveRepTypeEnabled();
     refreshMarkers();
   }
+}
+
+function movePinAndHandlePosition(lat, lon) {
+  ensureAtLeastOneRepTypeSelected();
+  draggablePin.setLatLng([lat, lon]);
   var position = {
     coords: {
-      latitude: draggablePin.getLatLng().lat,
-      longitude: draggablePin.getLatLng().lng,
+      latitude: lat,
+      longitude: lon,
     },
   };
   handlePosition(position, true);
+}
+
+function getPinPopupContent(latlng) {
+  return "" +
+    "<div style='min-width:230px;'>" +
+      "<p style='margin:0 0 6px 0;'>Влачи това габърче или задай координати ръчно.</p>" +
+      "<p style='margin:0 0 10px 0; font-size:0.92em;'>" +
+        "От тази точка до избран от теб репитер се изчислява линията на видимост (профил на терена)." +
+      "</p>" +
+      "<div style='display:flex; gap:6px; align-items:center; flex-wrap:nowrap;'>" +
+        "<button id='pin-geolocate-btn' type='button' title='Вземи текущата ми локация'><i class='fa-solid fa-location-crosshairs'></i></button>" +
+        "<input id='pin-lat-input' type='number' step='any' value='" + String(latlng.lat) + "' title='Latitude' placeholder='lat' style='width:88px;'>" +
+        "<input id='pin-lon-input' type='number' step='any' value='" + String(latlng.lng) + "' title='Longitude' placeholder='lon' style='width:88px;'>" +
+        "<button id='pin-apply-btn' type='button' title='Потвърди координатите' style='color:#15803d;'><i class='fa-solid fa-check'></i></button>" +
+      "</div>" +
+      "<div id='pin-popup-error' style='margin-top:6px; color:#b00020; font-size:0.9em;'></div>" +
+    "</div>";
+}
+
+function attachPinPopupHandlers() {
+  const latInput = document.getElementById('pin-lat-input');
+  const lonInput = document.getElementById('pin-lon-input');
+  const applyBtn = document.getElementById('pin-apply-btn');
+  const geolocateBtn = document.getElementById('pin-geolocate-btn');
+  const errorEl = document.getElementById('pin-popup-error');
+  if (!latInput || !lonInput || !applyBtn || !geolocateBtn || !errorEl) return;
+
+  const refreshPopupAfterMove = function () {
+    draggablePin.setPopupContent(getPinPopupContent(draggablePin.getLatLng()));
+    setTimeout(attachPinPopupHandlers, 0);
+  };
+
+  const apply = function () {
+    const lat = Number(latInput.value);
+    const lon = Number(lonInput.value);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      errorEl.textContent = 'Моля, въведи валидни числа за lat/lon.';
+      return;
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      errorEl.textContent = 'Координатите са извън допустимите граници.';
+      return;
+    }
+    errorEl.textContent = '';
+    movePinAndHandlePosition(lat, lon);
+    refreshPopupAfterMove();
+  };
+
+  applyBtn.onclick = apply;
+  geolocateBtn.onclick = function () {
+    if (!navigator.geolocation) {
+      errorEl.textContent = 'Браузърът не поддържа геолокация.';
+      return;
+    }
+    errorEl.textContent = 'Опит за вземане на текуща локация...';
+    navigator.geolocation.getCurrentPosition(
+      function (position) {
+        const lat = Number(position.coords.latitude);
+        const lon = Number(position.coords.longitude);
+        latInput.value = String(lat);
+        lonInput.value = String(lon);
+        errorEl.textContent = '';
+        movePinAndHandlePosition(lat, lon);
+        refreshPopupAfterMove();
+      },
+      function () {
+        errorEl.textContent = 'Неуспешно вземане на локацията. Провери разрешенията на браузъра.';
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  };
+  latInput.onkeydown = function (e) {
+    if (e.key === 'Enter') apply();
+  };
+  lonInput.onkeydown = function (e) {
+    if (e.key === 'Enter') apply();
+  };
+}
+
+draggablePin.bindPopup(function () {
+  return getPinPopupContent(draggablePin.getLatLng());
+});
+
+draggablePin.on('popupopen', function () {
+  attachPinPopupHandlers();
+});
+
+draggablePin.on("dragend", function () {
+  const ll = draggablePin.getLatLng();
+  movePinAndHandlePosition(ll.lat, ll.lng);
 });
 
 map.addLayer(markers);
