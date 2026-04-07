@@ -11,10 +11,9 @@ let dbLastUpdate = '';
 let dbChangelog = null;
 
 // Feature flags
-// Disable HeyWhatsThat contour tiles overlay by default to avoid API blocking
-// Toggle to true manually in console or code if needed in the future.
-window.LZ_ENABLE_CONTOURS_OVERLAY = false;
 window.LZ_DEBUG_FILTERS = false;
+// Terrain profile engine: 'svg' (local SRTM-based, default) or 'heywhatsthat' (external service)
+window.LZ_TERRAIN_PROFILE = 'svg';
 
 let siteChangelogText = '';
 let siteChangelogError = null;
@@ -266,8 +265,7 @@ function addRepeater(r) {
   const net = r.internet || {};
   var terrainProfileLink =
     '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
-    `<a href="#" class="terrain-profile-link" title="Генерирай профил на терена" onclick="generateTerrainProfile('${r.callsign}');return false;">Генерирай профил на терена</a>` +
-    '<div class="terrain-profile-comment">от тук до поставеното габърче</div>' +
+    `<a href="#" class="terrain-profile-link" title="Regenerate terrain profile" onclick="generateTerrainProfile('${r.callsign}');return false;">↺ Профил на терена</a>` +
     `<div id='terrain-profile-${r.callsign}' style='width: 100%; text-align: center;'></div>` +
     '</div>';
 
@@ -362,84 +360,7 @@ function addRepeater(r) {
   r._marker = marker;
 }
 
-function generateTerrainProfile(callsign) {
-  const rep = reps.find(r => r.callsign === callsign);
-  if (!rep) {
-    alert('Не е намерен репитър: ' + callsign);
-    return;
-  }
-
-  const pinCoords = {
-    lat: draggablePin.getLatLng().lat,
-    lon: draggablePin.getLatLng().lng,
-  };
-
-  const container = document.getElementById('terrain-profile-' + callsign);
-  if (container) {
-    const parent = container.parentElement;
-    if (parent) {
-      const link = parent.querySelector('.terrain-profile-link');
-      const comment = parent.querySelector('.terrain-profile-comment');
-      if (link) link.style.display = 'none';
-      if (comment) comment.style.display = 'none';
-    }
-    container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.latitude.toFixed(4) + ', ' + rep.longitude.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
-  }
-
-  function getTerrainProfileImage(node1, node2) {
-    const lineColour = 'FF0000';
-    const node1MarkerColour = 'FF3366';
-    const node2MarkerColour = 'FF3366';
-    const node1Latitude = node1.lat;
-    const node1Longitude = node1.lon;
-    const node2Latitude = node2.lat;
-    const node2Longitude = node2.lon;
-    const node1ElevationMSL = (rep.altitude ? rep.altitude : '');
-    const node2ElevationMSL = '';
-    const websiteDomain = 'lz.free.bg';
-
-    const params = new URLSearchParams({
-      src: websiteDomain,
-      axes: 1,
-      metric: 1,
-      curvature: 1,
-      greatcircle: 1,
-      refraction: '',
-      exaggeration: '',
-      groundrelative: '',
-      los: 1,
-      freq: parseInt(rep.rx, 10),
-      width: 1600,
-      height: 500,
-      pt0: `${node1Latitude},${node1Longitude},${lineColour},${node1ElevationMSL},${node1MarkerColour}`,
-      pt1: `${node2Latitude},${node2Longitude},${lineColour},${node2ElevationMSL},${node2MarkerColour}`,
-    });
-
-    return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
-  }
-
-  try {
-    const terrainImageUrl = getTerrainProfileImage({ lat: rep.latitude, lon: rep.longitude }, pinCoords);
-    if (container) {
-      const alt = `Профил на терена между ${callsign} и габърчето`;
-      container.innerHTML = `
-        <a href="${terrainImageUrl}" target="_blank">
-          <img src="${terrainImageUrl}"
-               alt="${alt}"
-               loading="lazy" decoding="async" referrerpolicy="no-referrer"
-               style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
-               onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
-        </a>
-        <div class="terrain-profile-credit">Изображение от <a href="https://www.heywhatsthat.com/" target="_blank">HeyWhatsThat.com</a></div>
-      `;
-    }
-  } catch (e) {
-    if (container) {
-      container.innerHTML = '<div class="text-danger">Възникна грешка при генериране на профила на терена.</div>';
-    }
-    console.error('Грешка при генериране на профила на терена:', e);
-  }
-}
+// generateTerrainProfile is defined in src/terrain-profile.js
 
 const repTypes = [
   { key: "analog", label: "Analog/FM", color: "color-rep-analog" },
@@ -897,45 +818,6 @@ function doOverlay(image, LatStart, LngStart, LatEnd, LngEnd) {
   return overlay;
 }
 
-// Create a HeyWhatsThat contour tile overlay as a Leaflet TileLayer
-function createContoursOverlay(options = {}) {
-  // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
-  const websiteDomain = 'lz.free.bg';
-  const color = options.color || '83422580'; // semi-transparent brown (RRGGBBAA)
-
-  function defaultIntervalForZoom(z) {
-    // Per docs: minimums (m): 0-4:200, 5-7:80, 8:40, 9:20, 10-13:8, 14:4, 15:2, 16+:0.8
-    // Use ~4x minimum as a safe, visually reasonable default.
-    let min;
-    if (z <= 4) min = 200;
-    else if (z <= 7) min = 80;
-    else if (z === 8) min = 40;
-    else if (z === 9) min = 20;
-    else if (z <= 13) min = 8;
-    else if (z === 14) min = 4;
-    else if (z === 15) min = 2;
-    else min = 0.8;
-    const val = Math.max(1, Math.round(min * 4));
-    return options.interval || val;
-  }
-
-  const layer = L.tileLayer('', {
-    pane: 'general',
-    opacity: 1,
-    tileSize: 256,
-    attribution: 'Contours © HeyWhatsThat.com',
-  });
-
-  layer.getTileUrl = function (coords) {
-    const z = coords.z;
-    const interval = defaultIntervalForZoom(z);
-    const x = coords.x;
-    const y = coords.y;
-    return `https://contour.heywhatsthat.com/bin/contour_tiles.cgi?zoom=${z}&x=${x}&y=${y}&color=${color}&interval=${interval}&src=${encodeURIComponent(websiteDomain)}`;
-  };
-
-  return layer;
-}
 
 function removeOverlay(force = false) {
   if ((force || (sidebarActive !== true && activeForNearbyNodes !== true)) && window.overlay) {
@@ -981,61 +863,16 @@ markers.on("popupopen", function (e) {
     map.addLayer(overlay);
     window.overlay = overlay;
   } else {
-    // No RF coverage image available; fall back to HeyWhatsThat contour tiles overlay
-    if (!window.LZ_ENABLE_CONTOURS_OVERLAY) {
-      // Contours overlay globally disabled
-      return;
-    }
-    if (window._contoursSuppressed) {
-      return; // Avoid repeated attempts if previously blocked/failed
-    }
-    var overlay = createContoursOverlay({});
     const m = e.popup._source;
-
-    // If tiles fail to load (blocked or server error), remove the overlay to avoid repeated errors
-    overlay.on('tileerror', function(ev) {
-      if (!window._contoursSuppressed) {
-        console.debug('Contours unavailable or blocked; suppressing further attempts. First failure at z=' + ev.coords.z + ' x=' + ev.coords.x + ' y=' + ev.coords.y);
-      }
-      window._contoursSuppressed = true;
-      if (!window._contoursNoteShown) {
-        window._contoursNoteShown = true;
-        try {
-          const note = document.createElement('div');
-          note.id = 'contours-note';
-          note.setAttribute('role', 'status');
-          note.style.cssText = [
-            'position:fixed',
-            'left:12px',
-            'bottom:12px',
-            'z-index:10000',
-            'max-width:84vw',
-            'background:rgba(42,42,45,0.95)',
-            'color:#eee',
-            'padding:8px 12px',
-            'border-radius:6px',
-            'font: 13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
-            'box-shadow:0 2px 10px rgba(0,0,0,0.25)'
-          ].join(';');
-          note.innerHTML = "<strong>Слой с контури не е наличен</strong> — услугата на HeyWhatsThat е временно недостъпна или блокирана. Показваме само основната карта. <a href='https://www.heywhatsthat.com/' target='_blank' style='color:#8ecae6;text-decoration:underline'>Повече</a> <button type='button' aria-label='Затвори' style='margin-left:10px;background:transparent;border:none;color:#aaa;cursor:pointer;font-size:14px'>×</button>";
-          const btn = note.querySelector('button');
-          btn.onclick = () => note.remove();
-          document.body.appendChild(note);
-          setTimeout(() => { try { note.remove(); } catch (_) {} }, 6000);
-        } catch (__) { /* no-op */ }
-      }
-      if (window.overlay) {
-        try { map.removeLayer(window.overlay); } catch (_) {}
-        window.overlay = null;
-      }
-    });
-
     markers.removeLayer(m);
     out.addLayer(m);
     debugFilterState(repOpen, 'popupopen:after-move-to-out-no-coverage');
     m.openPopup();
-    map.addLayer(overlay);
-    window.overlay = overlay;
+  }
+
+  // Auto-generate terrain profile (deferred so popup DOM is fully rendered)
+  if (repOpen && typeof generateTerrainProfile === 'function') {
+    setTimeout(() => generateTerrainProfile(repOpen.callsign), 0);
   }
 });
 
