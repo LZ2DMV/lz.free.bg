@@ -41,8 +41,10 @@ async function _fetchHgt(tileName) {
 
 function _readElevation(buf, lat, lon) {
   // SRTM3: 1201×1201 big-endian Int16; row 0 = north edge of tile
-  const row = 1200 - Math.round((lat - Math.floor(lat)) * 1200);
-  const col = Math.round((lon - Math.floor(lon)) * 1200);
+  // Clamp to [0, 1200] — floating-point arithmetic at tile boundaries can produce 1201,
+  // pushing the offset past the end of the DataView (RangeError).
+  const row = Math.min(1200, Math.max(0, 1200 - Math.round((lat - Math.floor(lat)) * 1200)));
+  const col = Math.min(1200, Math.max(0, Math.round((lon - Math.floor(lon)) * 1200)));
   const v = new DataView(buf).getInt16((row * 1201 + col) * 2, false);
   return v < -9000 ? 0 : v; // treat voids as 0 (sea level)
 }
