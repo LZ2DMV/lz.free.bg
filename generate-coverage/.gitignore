@@ -1,0 +1,6 @@
+.venv/
+Signal-Server/
+__pycache__/
+sdf/
+srtm/
+
