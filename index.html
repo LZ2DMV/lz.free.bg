@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
 Кодът на картата е свободен и може да бъде използван в други проекти по всякакъв начин.
+https://github.com/LZ2DMV/lz.free.bg
 Това не включва петната с покритие, които са генерирани с външен софтуер с по-рестриктивен лиценз.
 
 Данни за ретранслаторите: https://api.varna.radio/v1
@@ -9,12 +10,6 @@ JS библиотека: https://api.varna.radio/bgreps.js
 <html>
 
 <head>
-
-	<script>
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost')
-      location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
-	</script>
-
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="description"
     content="Карта на радиолюбителските ретранслатори на територията на Република България - актуална информация за честоти и покритие.">
@@ -36,23 +31,48 @@ JS библиотека: https://api.varna.radio/bgreps.js
   <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
   <script src="https://unpkg.com/leaflet-easybutton@2.4.0/src/easy-button.js"></script>
-  <script src="https://ivansanchez.gitlab.io/leaflet.maidenhead/src/maidenhead.js"></script>
   <script src="src/L.Control.Sidebar.js"></script>
   <script src="src/L.Control.Window.js"></script>
   <script src="src/leaflet.geometryutil.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@5.0.10-beta/dist/fuse.min.js"></script>
   <script src="src/AnimatedSearchBox.js"></script>
+  <script src="src/terrain-profile.js"></script>
 </head>
 
 <body>
   <div id="map"></div>
   <div id="sidebar"></div>
   <script>
-    // window.isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
-    window.isLocal = false;
+    var localByHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+
+    (function setLocalModeFlag() {
+      var params = new URLSearchParams(window.location.search || '');
+
+      if (!params.has('localApi')) {
+        window.localApi = localByHost;
+        return;
+      }
+
+      var raw = (params.get('localApi') || '').trim().toLowerCase();
+      if (raw === '' || raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') {
+        window.localApi = true;
+        return;
+      }
+
+      if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') {
+        window.localApi = false;
+        return;
+      }
+
+      window.localApi = false;
+    })();
+
+    if (location.protocol !== 'https:' && !localByHost)
+      location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
+
     (function loadClients() {
       var client = document.createElement('script');
-      client.src = window.isLocal ? 'http://localhost:8787/bgreps.js' : 'https://api.varna.radio/bgreps.js';
+      client.src = window.localApi ? 'http://localhost:8787/bgreps.js' : 'https://api.varna.radio/bgreps.js';
       client.async = false;
       client.onload = function () {
         var lz = document.createElement('script');

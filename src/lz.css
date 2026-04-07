@@ -6,6 +6,7 @@
   --rep-fusion: #ed82ff;
   --rep-nxdn: #ff9b85;
   --rep-parrot: #ffff7c;
+  --rep-beacon: #ffd166;
 }
 
 #map {
@@ -168,6 +169,10 @@ body {
 
 .color-rep-parrot {
   color: var(--rep-parrot);
+}
+
+.color-rep-beacon {
+  color: var(--rep-beacon);
 }
 
 .csv-button.all {
@@ -432,6 +437,22 @@ body {
 .terrain-profile-link-container[style*="text-align: left"] .terrain-profile-credit {
   text-align: left !important;
   margin-top: 2px;
+}
+
+.terrain-svg-chart {
+  width: 100%;
+  max-width: 500px;
+  height: auto;
+  display: block;
+  margin: 4px auto 0;
+  border-radius: 4px;
+  overflow: visible;
+  cursor: pointer;
+}
+
+.terrain-profile-link {
+  font-size: 0.82em;
+  opacity: 0.7;
 }
 
 .terrain-profile-button {

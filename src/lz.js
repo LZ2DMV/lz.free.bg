@@ -11,20 +11,16 @@ let dbLastUpdate = '';
 let dbChangelog = null;
 
 // Feature flags
-// Disable HeyWhatsThat contour tiles overlay by default to avoid API blocking
-// Toggle to true manually in console or code if needed in the future.
-window.LZ_ENABLE_CONTOURS_OVERLAY = false;
+window.LZ_DEBUG_FILTERS = false;
+// Terrain profile engine: 'svg' (local SRTM-based, default) or 'heywhatsthat' (external service)
+window.LZ_TERRAIN_PROFILE = 'svg';
 
 let siteChangelogText = '';
 let siteChangelogError = null;
 let siteChangelogPromise = null;
 
-const isLocal = (typeof window !== 'undefined' && typeof window.isLocal === 'boolean')
-  ? window.isLocal
-  : ['localhost', '127.0.0.1'].includes(location.hostname);
-window.isLocal = isLocal;
 const api = new BGRepeaters({
-  baseURL: isLocal ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
+  baseURL: window.localApi ? 'http://localhost:8787/v1' : 'https://api.varna.radio/v1'
 });
 
 function escapeTextBlock(value) {
@@ -43,7 +39,6 @@ function fetchSiteChangelog() {
     siteChangelogError = new Error('fetch unavailable in this browser');
     return Promise.resolve('');
   }
-  // const changelogUrl = isLocal ? 'changelog.txt' : 'https://lz.free.bg/changelog.txt';
   const changelogUrl = 'changelog.txt';
   siteChangelogPromise = fetch(changelogUrl, { cache: 'no-store' })
     .then((resp) => {
@@ -74,26 +69,9 @@ function getSiteChangelogMarkup() {
 
 fetchSiteChangelog();
 
-// Helpers migrated from old reps.js
-function getChannelFromMHz(rxMHz) {
-  const f = parseFloat(rxMHz).toFixed(4) * 10000;
-  let chan = "N/A";
-  if (f >= 1452000 && f < 1454000 && (f - 1452000) % 250 == 0) { // VHF R8-R15
-    chan = 'R' + parseInt(((f - 1452000) / 250) + 8);
-  } else if (f >= 1456000 && f < 1460000 && (f - 1456000) % 250 == 0) { // VHF R0-R7
-    chan = 'R' + parseInt((f - 1456000) / 250);
-  } else if (f >= 4300000 && f < 4400000 && (f - 4300000) % 125 == 0) { // UHF
-    chan = 'RU' + ((f - 4300000) / 125).toFixed(0).padStart(3, '0');
-  }
-  if (f >= 1450000 && f < 1460000 && (f - 1450000) % 125 == 0)
-    chan = (chan === 'N/A' ? '' : chan + ', ') + 'RV' + ((f - 1450000) / 125).toFixed(0).padStart(2, '0');
-  return chan;
-}
-
 function getFormatedFreqMHz(f) {
-  let fstr = parseFloat(f).toFixed(4).toString();
-  let r = fstr.charAt(fstr.length - 1) === '0' ? parseFloat(f).toFixed(3) : parseFloat(f).toFixed(4);
-  return r;
+  const parsed = parseFloat(f);
+  return parsed.toFixed(4).endsWith('0') ? parsed.toFixed(3) : parsed.toFixed(4);
 }
 
 function isModeEnabled(val) {
@@ -114,14 +92,15 @@ function isModeEnabled(val) {
 const MODE_KEY_DEFS = {
   fm: ['analog'],
   am: ['analog'],
-  usb: ['analog', 'usb'],
-  lsb: ['analog', 'lsb'],
+  usb: ['analog'],
+  lsb: ['analog'],
   dmr: ['dmr'],
   dstar: ['dstar'],
   fusion: ['fusion'],
   ysf: ['fusion'],
   parrot: ['parrot'],
   nxdn: ['nxdn'],
+  beacon: ['analog'],
 };
 
 function collectModeKeys(modes) {
@@ -129,7 +108,8 @@ function collectModeKeys(modes) {
   if (modes && typeof modes === 'object') {
     Object.keys(modes).forEach((k) => {
       if (!isModeEnabled(modes[k])) return;
-      const mapped = MODE_KEY_DEFS[k] || [k];
+      const normalized = String(k).toLowerCase();
+      const mapped = MODE_KEY_DEFS[normalized] || [normalized];
       mapped.forEach((value) => keys.add(value));
     });
   }
@@ -142,15 +122,6 @@ function parseInfoList(value) {
   return [];
 }
 
-function safeParseCoverage(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    console.warn('Invalid coverage_map_json payload, ignoring entry');
-    return null;
-  }
-}
 
 function buildLocationLabel(place, exactLocation) {
   const base = place || '';
@@ -167,8 +138,11 @@ function decorateRepeater(r) {
   const infoString = infoList.join("\r\n").replace(/<[^>]+>/gm, '');
   const modesArray = collectModeKeys(r.modes || {});
   const band = typeof rxMHz === 'number' && !isNaN(rxMHz) ? (rxMHz > 146 ? 'UHF' : 'VHF') : 'VHF';
-  const coverage = r.coverage || safeParseCoverage(r.coverage_map_json) || null;
-  const channel = (r && r.freq && r.freq.channel) ? r.freq.channel : (typeof rxMHz === 'number' ? getChannelFromMHz(rxMHz) : 'N/A');
+  const coverage = null; // Coverage loaded exclusively from local manifest (coverage/manifest.json)
+  const channel = r && r.freq && r.freq.channel !== undefined && r.freq.channel !== null
+    ? String(r.freq.channel).trim()
+    : '';
+  const qth = typeof r.qth === 'string' && r.qth.trim().length ? r.qth.trim() : 'N/A';
   const locationLabel = buildLocationLabel(r.place, r.location);
 
   Object.assign(r, {
@@ -183,6 +157,7 @@ function decorateRepeater(r) {
     band,
     coverage,
     channel,
+    qth,
     modesArray,
     modesString: modesArray.length ? modesArray.join(', ') : '—',
     locationLabel,
@@ -197,9 +172,41 @@ async function loadFromAPI() {
   return (list || []).filter(r => !r.disabled).map(decorateRepeater);
 }
 
+/**
+ * Load locally-generated coverage manifest (coverage/manifest.json).
+ * The manifest maps callsign → [relativeImageUrl, south, west, north, east].
+ * Entries are applied to repeaters that don't already have API-provided coverage.
+ * Generated by generate-coverage/04_generate_coverage.py.
+ */
+async function loadCoverageManifest() {
+  try {
+    const resp = await fetch('coverage/manifest.json', { cache: 'no-cache' });
+    if (!resp.ok) return {};
+    return await resp.json();
+  } catch (_) {
+    return {};
+  }
+}
+
 (async function initLoad() {
   try {
-    reps = await loadFromAPI();
+    const [repsFromAPI, coverageManifest] = await Promise.all([
+      loadFromAPI(),
+      loadCoverageManifest(),
+    ]);
+    reps = repsFromAPI;
+
+    // Apply locally-generated coverage from manifest.
+    // Manifest format: { callsign: { bounds: [url, s, w, n, e], updated: ISO } }
+    // Legacy format (bare array) is also accepted for backwards compatibility.
+    if (Object.keys(coverageManifest).length) {
+      reps.forEach(r => {
+        const entry = coverageManifest[r.callsign];
+        if (entry) {
+          r.coverage = Array.isArray(entry) ? entry : entry.bounds;
+        }
+      });
+    }
     // Populate changelog using library’s endpoint shape: { lastChanged, changes: [{date, who, info}] }
     try {
       const cl = await api.getChangelog();
@@ -234,16 +241,7 @@ async function loadFromAPI() {
       });
       addBottomBox();
       updateFuseSearch();
-      markers.clearLayers();
-      reps.forEach(r => {
-        const marker = r._marker;
-        if (!marker) return;
-        if (r.modesArray.some(t => repTypeEnabled[t])) {
-          markers.addLayer(marker);
-        }
-      });
-      var el = document.getElementById("active-marker-count");
-      if (el) el.textContent = markers.getLayers().length;
+      refreshMarkers();
       if (callsign) searchLayers(callsign);
       if (coords) {
         coords = coords.split(",");
@@ -267,8 +265,7 @@ function addRepeater(r) {
   const net = r.internet || {};
   var terrainProfileLink =
     '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
-    `<a href="#" class="terrain-profile-link" title="Генерирай профил на терена" onclick="generateTerrainProfile('${r.callsign}');return false;">Генерирай профил на терена</a>` +
-    '<div class="terrain-profile-comment">от тук до поставеното габърче</div>' +
+    `<a href="#" class="terrain-profile-link" title="Regenerate terrain profile" onclick="generateTerrainProfile('${r.callsign}');return false;">↺ Профил на терена</a>` +
     `<div id='terrain-profile-${r.callsign}' style='width: 100%; text-align: center;'></div>` +
     '</div>';
 
@@ -352,12 +349,9 @@ function addRepeater(r) {
   marker.boundary = r.coverage ? r.coverage : null;
   marker.name = r.callsign;
   marker.repTypes = r.modesArray;
-  r.modesArray.forEach(type => {
-    if (repMarkersByType[type]) repMarkersByType[type].push(marker);
-  });
   markers.addLayer(marker);
   repsAll += 1;
-  if (r.modesArray.includes("analog") || r.modesArray.includes("usb") || r.modesArray.includes("lsb")) repsFM += 1;
+  if (r.modesArray.includes("analog")) repsFM += 1;
   if (r.modesArray.includes("dstar")) repsDStar += 1;
   if (r.modesArray.includes("dmr")) repsDMR += 1;
   if (r.modesArray.includes("fusion")) repsYSF += 1;
@@ -366,89 +360,10 @@ function addRepeater(r) {
   r._marker = marker;
 }
 
-function generateTerrainProfile(callsign) {
-  const rep = reps.find(r => r.callsign === callsign);
-  if (!rep) {
-    alert('Не е намерен репитър: ' + callsign);
-    return;
-  }
-
-  const pinCoords = {
-    lat: draggablePin.getLatLng().lat,
-    lon: draggablePin.getLatLng().lng,
-  };
-
-  const container = document.getElementById('terrain-profile-' + callsign);
-  if (container) {
-    const parent = container.parentElement;
-    if (parent) {
-      const link = parent.querySelector('.terrain-profile-link');
-      const comment = parent.querySelector('.terrain-profile-comment');
-      if (link) link.style.display = 'none';
-      if (comment) comment.style.display = 'none';
-    }
-    container.innerHTML = 'Генериране от ' + callsign + ' (' + rep.latitude.toFixed(4) + ', ' + rep.longitude.toFixed(4) + ') до габърчето (' + pinCoords.lat.toFixed(4) + ', ' + pinCoords.lon.toFixed(4) + ')...';
-  }
-
-  function getTerrainProfileImage(node1, node2) {
-    const lineColour = 'FF0000';
-    const node1MarkerColour = 'FF3366';
-    const node2MarkerColour = 'FF3366';
-    const node1Latitude = node1.lat;
-    const node1Longitude = node1.lon;
-    const node2Latitude = node2.lat;
-    const node2Longitude = node2.lon;
-    const node1ElevationMSL = (rep.altitude ? rep.altitude : '');
-    const node2ElevationMSL = '';
-    const websiteDomain = 'lz.free.bg';
-
-    const params = new URLSearchParams({
-      src: websiteDomain,
-      axes: 1,
-      metric: 1,
-      curvature: 1,
-      greatcircle: 1,
-      refraction: '',
-      exaggeration: '',
-      groundrelative: '',
-      los: 1,
-      freq: parseInt(rep.rx, 10),
-      width: 1600,
-      height: 500,
-      pt0: `${node1Latitude},${node1Longitude},${lineColour},${node1ElevationMSL},${node1MarkerColour}`,
-      pt1: `${node2Latitude},${node2Longitude},${lineColour},${node2ElevationMSL},${node2MarkerColour}`,
-    });
-
-    return 'https://heywhatsthat.com/bin/profile-0904.cgi?' + params.toString();
-  }
-
-  try {
-    const terrainImageUrl = getTerrainProfileImage({ lat: rep.latitude, lon: rep.longitude }, pinCoords);
-    if (container) {
-      const alt = `Профил на терена между ${callsign} и габърчето`;
-      container.innerHTML = `
-        <a href="${terrainImageUrl}" target="_blank">
-          <img src="${terrainImageUrl}"
-               alt="${alt}"
-               loading="lazy" decoding="async" referrerpolicy="no-referrer"
-               style="width: 100%; height: auto; max-width: 500px; border: 1px solid #dee2e6; border-radius: 0.375rem;"
-               onerror="this.parentElement.innerHTML='<' + 'div class=\\'text-muted\\'>Неуспешно зареждане на профила на терена</div>'">
-        </a>
-        <div class="terrain-profile-credit">Изображение от <a href="https://www.heywhatsthat.com/" target="_blank">HeyWhatsThat.com</a></div>
-      `;
-    }
-  } catch (e) {
-    if (container) {
-      container.innerHTML = '<div class="text-danger">Възникна грешка при генериране на профила на терена.</div>';
-    }
-    console.error('Грешка при генериране на профила на терена:', e);
-  }
-}
+// generateTerrainProfile is defined in src/terrain-profile.js
 
 const repTypes = [
   { key: "analog", label: "Analog/FM", color: "color-rep-analog" },
-  { key: "usb", label: "Analog/USB", color: "color-rep-analog" },
-  { key: "lsb", label: "Analog/LSB", color: "color-rep-analog" },
   { key: "dstar", label: "D-Star", color: "color-rep-dstar" },
   { key: "dmr", label: "DMR", color: "color-rep-dmr" },
   { key: "fusion", label: "Fusion", color: "color-rep-fusion" },
@@ -458,8 +373,6 @@ const repTypes = [
 
 let repTypeEnabled = {
   analog: true,
-  usb: true,
-  lsb: true,
   dstar: true,
   dmr: true,
   fusion: true,
@@ -467,16 +380,6 @@ let repTypeEnabled = {
   parrot: true,
 };
 
-let repMarkersByType = {
-  analog: [],
-  usb: [],
-  lsb: [],
-  dstar: [],
-  dmr: [],
-  fusion: [],
-  nxdn: [],
-  parrot: [],
-};
 
 function loadRepTypeEnabled() {
   try {
@@ -504,6 +407,46 @@ function saveRepTypeEnabled() {
 
 loadRepTypeEnabled();
 
+function isDebugTarget(rep) {
+  if (!rep || !rep.callsign) return false;
+  return rep.callsign === 'LZ0PUB' || window.LZ_DEBUG_FILTERS === 'all';
+}
+
+function debugFilterState(rep, reason) {
+  if (!window.LZ_DEBUG_FILTERS || !isDebugTarget(rep) || !rep._marker) return;
+  const enabled = isMarkerTypeEnabled(rep);
+  const inMarkers = markers.hasLayer(rep._marker);
+  const inOut = out.hasLayer(rep._marker);
+  const active = Object.keys(repTypeEnabled).filter((k) => !!repTypeEnabled[k]);
+  console.debug('[LZ_FILTER_DEBUG]', {
+    reason,
+    callsign: rep.callsign,
+    modesArray: rep.modesArray,
+    enabled,
+    inMarkers,
+    inOut,
+    activeTypes: active,
+    repTypeEnabled: { ...repTypeEnabled },
+  });
+}
+
+function isMarkerTypeEnabled(rep) {
+  return !!(rep && rep.modesArray && rep.modesArray.some((t) => repTypeEnabled[t]));
+}
+
+function refreshMarkers() {
+  markers.clearLayers();
+  out.clearLayers();
+  reps.forEach(r => {
+    debugFilterState(r, 'refresh:before');
+    if (r._marker && isMarkerTypeEnabled(r))
+      markers.addLayer(r._marker);
+    debugFilterState(r, 'refresh:after');
+  });
+  const el = document.getElementById("active-marker-count");
+  if (el) el.textContent = markers.getLayers().length;
+}
+
 function addBottomBox() {
   var box = L.control({ position: "bottomright" });
   box.onAdd = function (map) {
@@ -528,9 +471,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.analog ? "checked" : ""} data-type="analog" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-analog" type="checkbox" ${repTypeEnabled.analog ? "checked" : ""} data-type="analog" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-analog">Analog/FM/USB/LSB</td>
+            <td class="color-rep-analog"><label for="rep-type-analog" style="cursor:pointer;">Analog/FM/AM/SSB</label></td>
             <td align="center"><b class="color-rep-analog">${repsFM}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('analog');" class="csv-button analog">
@@ -540,9 +483,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.dstar ? "checked" : ""} data-type="dstar" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-dstar" type="checkbox" ${repTypeEnabled.dstar ? "checked" : ""} data-type="dstar" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-dstar">D-Star</td>
+            <td class="color-rep-dstar"><label for="rep-type-dstar" style="cursor:pointer;">D-Star</label></td>
             <td align="center"><b class="color-rep-dstar">${repsDStar}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('dstar');" class="csv-button dstar">
@@ -552,9 +495,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.dmr ? "checked" : ""} data-type="dmr" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-dmr" type="checkbox" ${repTypeEnabled.dmr ? "checked" : ""} data-type="dmr" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-dmr">DMR</td>
+            <td class="color-rep-dmr"><label for="rep-type-dmr" style="cursor:pointer;">DMR</label></td>
             <td align="center"><b class="color-rep-dmr">${repsDMR}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('dmr');" class="csv-button dmr">
@@ -564,9 +507,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.fusion ? "checked" : ""} data-type="fusion" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-fusion" type="checkbox" ${repTypeEnabled.fusion ? "checked" : ""} data-type="fusion" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-fusion">Fusion</td>
+            <td class="color-rep-fusion"><label for="rep-type-fusion" style="cursor:pointer;">Fusion</label></td>
             <td align="center"><b class="color-rep-fusion">${repsYSF}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('fusion');" class="csv-button fusion">
@@ -576,9 +519,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.nxdn ? "checked" : ""} data-type="nxdn" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-nxdn" type="checkbox" ${repTypeEnabled.nxdn ? "checked" : ""} data-type="nxdn" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-nxdn">NXDN</td>
+            <td class="color-rep-nxdn"><label for="rep-type-nxdn" style="cursor:pointer;">NXDN</label></td>
             <td align="center"><b class="color-rep-nxdn">${repsNXDN}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('nxdn');" class="csv-button nxdn">
@@ -588,9 +531,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-parrot" type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-parrot">Parrot</td>
+            <td class="color-rep-parrot"><label for="rep-type-parrot" style="cursor:pointer;">Parrot</label></td>
             <td align="center"><b class="color-rep-parrot">${repsParrot}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('parrot');" class="csv-button parrot">
@@ -612,17 +555,16 @@ window.toggleFoldablePanel = function (panelDiv) {
 window.onRepTypeFilterChange = function (e) {
   const type = e.target.getAttribute("data-type");
   repTypeEnabled[type] = e.target.checked;
+  if (window.LZ_DEBUG_FILTERS) {
+    console.debug('[LZ_FILTER_DEBUG]', {
+      reason: 'checkbox:change',
+      type,
+      checked: e.target.checked,
+      repTypeEnabled: { ...repTypeEnabled },
+    });
+  }
   saveRepTypeEnabled();
-  markers.clearLayers();
-  reps.forEach(r => {
-    const marker = r._marker;
-    if (!marker) return;
-    if (r.modesArray.some(t => repTypeEnabled[t])) {
-      markers.addLayer(marker);
-    }
-  });
-  var el = document.getElementById("active-marker-count");
-  if (el) el.textContent = markers.getLayers().length;
+  refreshMarkers();
 };
 
 function updateFuseSearch() {
@@ -646,13 +588,7 @@ async function doAlert(force = false) {
       // handled via siteChangelogError
     }
   }
-  var lastModified = new Date(document.lastModified);
-  var siteVersion =
-    lastModified.getFullYear() +
-    "-" +
-    ("0" + (lastModified.getMonth() + 1)).slice(-2) +
-    "-" +
-    ("0" + lastModified.getDate()).slice(-2);
+  var siteVersion = new Date(document.lastModified).toISOString().slice(0, 10);
 
   // Use combined key so the alert appears when either site or DB changes
   var versionKey = siteVersion + '|' + (dbLastUpdate || '');
@@ -711,8 +647,8 @@ async function downloadCSV(mode) {
   }
 }
 
-sidebarActive = false;
-activeForNearbyNodes = false;
+let sidebarActive = false;
+let activeForNearbyNodes = false;
 
 var map = L.map("map", {
   // closePopupOnClick: false
@@ -852,16 +788,7 @@ draggablePin.on("dragend", function () {
       if (cb && !cb.checked) cb.checked = true;
     });
     saveRepTypeEnabled();
-    markers.clearLayers();
-    reps.forEach(r => {
-      const marker = r._marker;
-      if (!marker) return;
-      if (r.modesArray.some(t => repTypeEnabled[t])) {
-        markers.addLayer(marker);
-      }
-    });
-    const el = document.getElementById("active-marker-count");
-    if (el) el.textContent = markers.getLayers().length;
+    refreshMarkers();
   }
   var position = {
     coords: {
@@ -874,74 +801,40 @@ draggablePin.on("dragend", function () {
 
 map.addLayer(markers);
 
+let mapClickStartedWithOpenPopup = false;
+map.on("mousedown", function () {
+  mapClickStartedWithOpenPopup = !!document.querySelector(".leaflet-popup");
+});
+
 function doOverlay(image, LatStart, LngStart, LatEnd, LngEnd) {
-  if (!window.overlay) {
-    var bounds = new L.LatLngBounds(
-      new L.LatLng(LatStart, LngStart),
-      new L.LatLng(LatEnd, LngEnd)
-    );
+  var bounds = new L.LatLngBounds(
+    new L.LatLng(LatStart, LngStart),
+    new L.LatLng(LatEnd, LngEnd)
+  );
 
-    var overlay = new L.ImageOverlay(image, bounds, {
-      pane: "general",
-    });
-    return overlay;
-  }
-}
-
-// Create a HeyWhatsThat contour tile overlay as a Leaflet TileLayer
-function createContoursOverlay(options = {}) {
-  // const websiteDomain = (window.location && window.location.hostname) ? window.location.hostname : 'lz.free.bg';
-  const websiteDomain = 'lz.free.bg';
-  const color = options.color || '83422580'; // semi-transparent brown (RRGGBBAA)
-
-  function defaultIntervalForZoom(z) {
-    // Per docs: minimums (m): 0-4:200, 5-7:80, 8:40, 9:20, 10-13:8, 14:4, 15:2, 16+:0.8
-    // Use ~4x minimum as a safe, visually reasonable default.
-    let min;
-    if (z <= 4) min = 200;
-    else if (z <= 7) min = 80;
-    else if (z === 8) min = 40;
-    else if (z === 9) min = 20;
-    else if (z <= 13) min = 8;
-    else if (z === 14) min = 4;
-    else if (z === 15) min = 2;
-    else min = 0.8;
-    const val = Math.max(1, Math.round(min * 4));
-    return options.interval || val;
-  }
-
-  const layer = L.tileLayer('', {
-    pane: 'general',
-    opacity: 1,
-    tileSize: 256,
-    attribution: 'Contours © HeyWhatsThat.com',
+  var overlay = new L.ImageOverlay(image, bounds, {
+    pane: "general",
   });
-
-  layer.getTileUrl = function (coords) {
-    const z = coords.z;
-    const interval = defaultIntervalForZoom(z);
-    const x = coords.x;
-    const y = coords.y;
-    return `https://contour.heywhatsthat.com/bin/contour_tiles.cgi?zoom=${z}&x=${x}&y=${y}&color=${color}&interval=${interval}&src=${encodeURIComponent(websiteDomain)}`;
-  };
-
-  return layer;
+  return overlay;
 }
 
-function removeOverlay() {
-  if (sidebarActive !== true && activeForNearbyNodes !== true) {
-    if (window.overlay) {
-      map.removeLayer(overlay);
-      window.overlay = null;
-    }
+
+function removeOverlay(force = false) {
+  if ((force || (sidebarActive !== true && activeForNearbyNodes !== true)) && window.overlay) {
+    map.removeLayer(window.overlay);
+    window.overlay = null;
   }
 }
 
 markers.on("popupopen", function (e) {
+  // Always replace previous coverage when a new repeater is selected.
+  removeOverlay(true);
   if (sidebar.isVisible() && activeForNearbyNodes === false) {
     sidebar.hide();
   }
   activeMarker = e.popup._source;
+  const repOpen = reps.find((r) => r._marker === activeMarker);
+  debugFilterState(repOpen, 'popupopen:before-move-to-out');
   const popupContent = e.popup.getContent();
   const parser = new DOMParser();
   const doc = parser.parseFromString(popupContent, "text/html");
@@ -963,91 +856,35 @@ markers.on("popupopen", function (e) {
     var overlay = doOverlay(image, LatStart, LngStart, LatEnd, LngEnd);
     const m = e.popup._source;
 
-    // AF: fix a stale coverage overlay, when the popup is auto-closed
-    m.on("remove", function (p) {
-      // map.closePopup();
-      // m.closePopup();
-      // p.target.togglePopup();
-      // p.target.closePopup();
-      removeOverlay();
-      // console.log(p.target)
-    });
-
     markers.removeLayer(m);
     out.addLayer(m);
+    debugFilterState(repOpen, 'popupopen:after-move-to-out');
     m.openPopup();
     map.addLayer(overlay);
     window.overlay = overlay;
   } else {
-    // No RF coverage image available; fall back to HeyWhatsThat contour tiles overlay
-    if (!window.LZ_ENABLE_CONTOURS_OVERLAY) {
-      // Contours overlay globally disabled
-      return;
-    }
-    if (window._contoursSuppressed) {
-      return; // Avoid repeated attempts if previously blocked/failed
-    }
-    var overlay = createContoursOverlay({});
     const m = e.popup._source;
-
-    // Ensure overlay is cleaned up if the marker is removed
-    m.on("remove", function (p) {
-      removeOverlay();
-    });
-
-    // If tiles fail to load (blocked or server error), remove the overlay to avoid repeated errors
-    overlay.on('tileerror', function(ev) {
-      if (!window._contoursSuppressed) {
-        console.debug('Contours unavailable or blocked; suppressing further attempts. First failure at z=' + ev.coords.z + ' x=' + ev.coords.x + ' y=' + ev.coords.y);
-      }
-      window._contoursSuppressed = true;
-      if (!window._contoursNoteShown) {
-        window._contoursNoteShown = true;
-        try {
-          const note = document.createElement('div');
-          note.id = 'contours-note';
-          note.setAttribute('role', 'status');
-          note.style.cssText = [
-            'position:fixed',
-            'left:12px',
-            'bottom:12px',
-            'z-index:10000',
-            'max-width:84vw',
-            'background:rgba(42,42,45,0.95)',
-            'color:#eee',
-            'padding:8px 12px',
-            'border-radius:6px',
-            'font: 13px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
-            'box-shadow:0 2px 10px rgba(0,0,0,0.25)'
-          ].join(';');
-          note.innerHTML = "<strong>Слой с контури не е наличен</strong> — услугата на HeyWhatsThat е временно недостъпна или блокирана. Показваме само основната карта. <a href='https://www.heywhatsthat.com/' target='_blank' style='color:#8ecae6;text-decoration:underline'>Повече</a> <button type='button' aria-label='Затвори' style='margin-left:10px;background:transparent;border:none;color:#aaa;cursor:pointer;font-size:14px'>×</button>";
-          const btn = note.querySelector('button');
-          btn.onclick = () => note.remove();
-          document.body.appendChild(note);
-          setTimeout(() => { try { note.remove(); } catch (_) {} }, 6000);
-        } catch (__) { /* no-op */ }
-      }
-      if (window.overlay) {
-        try { map.removeLayer(window.overlay); } catch (_) {}
-        window.overlay = null;
-      }
-    });
-
     markers.removeLayer(m);
     out.addLayer(m);
+    debugFilterState(repOpen, 'popupopen:after-move-to-out-no-coverage');
     m.openPopup();
-    map.addLayer(overlay);
-    window.overlay = overlay;
+  }
+
+  // Auto-generate terrain profile (deferred so popup DOM is fully rendered)
+  if (repOpen && typeof generateTerrainProfile === 'function') {
+    setTimeout(() => generateTerrainProfile(repOpen.callsign), 0);
   }
 });
 
-markers.on("popupclose", removeOverlay);
-
 out.on("popupclose", function (e) {
-  removeOverlay();
   var m = e.popup._source;
   out.removeLayer(m);
-  markers.addLayer(m);
+  const rep = reps.find((r) => r._marker === m);
+  debugFilterState(rep, 'popupclose:before-return');
+  if (isMarkerTypeEnabled(rep)) {
+    markers.addLayer(m);
+  }
+  debugFilterState(rep, 'popupclose:after-return');
   m.closePopup();
 });
 
@@ -1057,45 +894,6 @@ markers.on("unspiderfied", function (a) {
     if (m.isPopupOpen()) a.cluster.spiderfy();
   });
 });
-
-// map.on('moveend zoomend', function (e) {
-//   bounds = map.getBounds();
-//   var zoom = map.getZoom();
-//   if (zoom > 16) {
-//     console.log('zoomed enough');
-//     markers.eachLayer(function (layer) {
-//       if (bounds.contains(layer.getLatLng())) {
-//         markersDisplayed = true;
-//         layer.openPopup();
-//         layer.spiderfy();
-//       }
-//     });
-//   } else if (markersDisplayed) {
-//     console.log('zoomed out enough');
-//     markersDisplayed = false;
-//     markers.eachLayer(function (layer) {
-//       if (bounds.contains(layer.getLatLng())) {
-//         layer.closePopup();
-//       }
-//     });
-//   }
-// });
-
-// markers.on('clusterclick', function (e) {
-//   bounds = map.getBounds();
-//   var zoom = map.getZoom();
-//   var childMarkers = e.layer.getAllChildMarkers();
-//   if (zoom > 16) {
-//     console.log('zoomed enough in cluster');
-//     console.log(childMarkers);
-//     childMarkers.forEach(function (layer) {
-//       if (bounds.contains(layer.getLatLng())) {
-//         markersDisplayed = true;
-//         layer.openPopup();
-//       }
-//     });
-//   }
-// });
 
 function searchLayers(name) {
   var found = false;
@@ -1117,16 +915,8 @@ function searchLayers(name) {
       }
     });
     if (changed) {
-      markers.clearLayers();
-      reps.forEach(r => {
-        const m = r._marker;
-        if (!m) return;
-        if (r.modesArray.some(t => repTypeEnabled[t])) {
-          markers.addLayer(m);
-        }
-      });
-      var el = document.getElementById("active-marker-count");
-      if (el) el.textContent = markers.getLayers().length;
+      debugFilterState(rep, 'searchLayers:enabled-types-before-refresh');
+      refreshMarkers();
     }
   }
 
@@ -1144,9 +934,12 @@ function searchLayers(name) {
   }
 }
 
+let home;
+
 function clearHomeIfExists() {
-  if (typeof home !== "undefined") {
+  if (home) {
     map.removeLayer(home);
+    home = undefined;
   }
 }
 
@@ -1208,6 +1001,10 @@ sidebar.on("hide", function () {
 });
 
 map.on("click", function () {
+  if (!mapClickStartedWithOpenPopup) {
+    removeOverlay(true);
+  }
+  mapClickStartedWithOpenPopup = false;
   if (sidebar.isVisible()) {
     sidebar.hide();
   }
@@ -1243,10 +1040,19 @@ function handlePosition(position, fromPin) {
   var nodesList = "<h3>Най-близките ретранслатори до вас:</h3>";
   var c = 1;
 
+  window.handleLayerClick = function (layerName) {
+    if (window.overlay) {
+      map.removeLayer(window.overlay);
+    }
+    window.overlay = null;
+    map.closePopup();
+    searchLayers(layerName);
+  };
+
   for (var i = 0; i < closestPoints.length; i++) {
-    locDesc = closestPoints[i].layer.options.title;
+    let locDesc = closestPoints[i].layer.options.title;
     locDesc = locDesc.substring(locDesc.indexOf(" - ") + 2);
-    distance =
+    const distance =
       closestPoints[i].layer
         .getLatLng()
         .distanceTo(currentPosition)
@@ -1268,15 +1074,6 @@ function handlePosition(position, fromPin) {
             ${rep.tone ? `data-tone="${rep.tone}"` : ""}
         >${modeLabel}</span>
     `;
-
-    window.handleLayerClick = function (layerName) {
-      if (window.overlay) {
-        map.removeLayer(overlay);
-      }
-      window.overlay = null;
-      map.closePopup();
-      searchLayers(layerName);
-    };
 
     nodesList +=
       c +
@@ -1326,12 +1123,6 @@ function handlePosition(position, fromPin) {
     position.coords.latitude.toFixed(5) +
     ", " +
     position.coords.longitude.toFixed(5) +
-    "<br/>QTH локатор: " +
-    L.Maidenhead.latLngToIndex(
-      parseFloat(position.coords.latitude.toFixed(5)),
-      parseFloat(position.coords.longitude.toFixed(5)),
-      6
-    ).toUpperCase() +
     "</i>";
 
   if (!fromPin) {
