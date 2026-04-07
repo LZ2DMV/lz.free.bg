@@ -6,6 +6,7 @@
   --rep-fusion: #ed82ff;
   --rep-nxdn: #ff9b85;
   --rep-parrot: #ffff7c;
+  --rep-beacon: #ffd166;
 }
 
 #map {
@@ -168,6 +169,10 @@ body {
 
 .color-rep-parrot {
   color: var(--rep-parrot);
+}
+
+.color-rep-beacon {
+  color: var(--rep-beacon);
 }
 
 .csv-button.all {

@@ -14,6 +14,7 @@ let dbChangelog = null;
 // Disable HeyWhatsThat contour tiles overlay by default to avoid API blocking
 // Toggle to true manually in console or code if needed in the future.
 window.LZ_ENABLE_CONTOURS_OVERLAY = false;
+window.LZ_DEBUG_FILTERS = false;
 
 let siteChangelogText = '';
 let siteChangelogError = null;
@@ -92,14 +93,15 @@ function isModeEnabled(val) {
 const MODE_KEY_DEFS = {
   fm: ['analog'],
   am: ['analog'],
-  usb: ['analog', 'usb'],
-  lsb: ['analog', 'lsb'],
+  usb: ['analog'],
+  lsb: ['analog'],
   dmr: ['dmr'],
   dstar: ['dstar'],
   fusion: ['fusion'],
   ysf: ['fusion'],
   parrot: ['parrot'],
   nxdn: ['nxdn'],
+  beacon: ['analog'],
 };
 
 function collectModeKeys(modes) {
@@ -107,7 +109,8 @@ function collectModeKeys(modes) {
   if (modes && typeof modes === 'object') {
     Object.keys(modes).forEach((k) => {
       if (!isModeEnabled(modes[k])) return;
-      const mapped = MODE_KEY_DEFS[k] || [k];
+      const normalized = String(k).toLowerCase();
+      const mapped = MODE_KEY_DEFS[normalized] || [normalized];
       mapped.forEach((value) => keys.add(value));
     });
   }
@@ -350,7 +353,7 @@ function addRepeater(r) {
   marker.repTypes = r.modesArray;
   markers.addLayer(marker);
   repsAll += 1;
-  if (r.modesArray.includes("analog") || r.modesArray.includes("usb") || r.modesArray.includes("lsb")) repsFM += 1;
+  if (r.modesArray.includes("analog")) repsFM += 1;
   if (r.modesArray.includes("dstar")) repsDStar += 1;
   if (r.modesArray.includes("dmr")) repsDMR += 1;
   if (r.modesArray.includes("fusion")) repsYSF += 1;
@@ -440,8 +443,6 @@ function generateTerrainProfile(callsign) {
 
 const repTypes = [
   { key: "analog", label: "Analog/FM", color: "color-rep-analog" },
-  { key: "usb", label: "Analog/USB", color: "color-rep-analog" },
-  { key: "lsb", label: "Analog/LSB", color: "color-rep-analog" },
   { key: "dstar", label: "D-Star", color: "color-rep-dstar" },
   { key: "dmr", label: "DMR", color: "color-rep-dmr" },
   { key: "fusion", label: "Fusion", color: "color-rep-fusion" },
@@ -451,8 +452,6 @@ const repTypes = [
 
 let repTypeEnabled = {
   analog: true,
-  usb: true,
-  lsb: true,
   dstar: true,
   dmr: true,
   fusion: true,
@@ -487,11 +486,41 @@ function saveRepTypeEnabled() {
 
 loadRepTypeEnabled();
 
+function isDebugTarget(rep) {
+  if (!rep || !rep.callsign) return false;
+  return rep.callsign === 'LZ0PUB' || window.LZ_DEBUG_FILTERS === 'all';
+}
+
+function debugFilterState(rep, reason) {
+  if (!window.LZ_DEBUG_FILTERS || !isDebugTarget(rep) || !rep._marker) return;
+  const enabled = isMarkerTypeEnabled(rep);
+  const inMarkers = markers.hasLayer(rep._marker);
+  const inOut = out.hasLayer(rep._marker);
+  const active = Object.keys(repTypeEnabled).filter((k) => !!repTypeEnabled[k]);
+  console.debug('[LZ_FILTER_DEBUG]', {
+    reason,
+    callsign: rep.callsign,
+    modesArray: rep.modesArray,
+    enabled,
+    inMarkers,
+    inOut,
+    activeTypes: active,
+    repTypeEnabled: { ...repTypeEnabled },
+  });
+}
+
+function isMarkerTypeEnabled(rep) {
+  return !!(rep && rep.modesArray && rep.modesArray.some((t) => repTypeEnabled[t]));
+}
+
 function refreshMarkers() {
   markers.clearLayers();
+  out.clearLayers();
   reps.forEach(r => {
-    if (r._marker && r.modesArray.some(t => repTypeEnabled[t]))
+    debugFilterState(r, 'refresh:before');
+    if (r._marker && isMarkerTypeEnabled(r))
       markers.addLayer(r._marker);
+    debugFilterState(r, 'refresh:after');
   });
   const el = document.getElementById("active-marker-count");
   if (el) el.textContent = markers.getLayers().length;
@@ -521,9 +550,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.analog ? "checked" : ""} data-type="analog" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-analog" type="checkbox" ${repTypeEnabled.analog ? "checked" : ""} data-type="analog" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-analog">Analog/FM/USB/LSB</td>
+            <td class="color-rep-analog"><label for="rep-type-analog" style="cursor:pointer;">Analog/FM/AM/SSB</label></td>
             <td align="center"><b class="color-rep-analog">${repsFM}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('analog');" class="csv-button analog">
@@ -533,9 +562,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.dstar ? "checked" : ""} data-type="dstar" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-dstar" type="checkbox" ${repTypeEnabled.dstar ? "checked" : ""} data-type="dstar" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-dstar">D-Star</td>
+            <td class="color-rep-dstar"><label for="rep-type-dstar" style="cursor:pointer;">D-Star</label></td>
             <td align="center"><b class="color-rep-dstar">${repsDStar}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('dstar');" class="csv-button dstar">
@@ -545,9 +574,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.dmr ? "checked" : ""} data-type="dmr" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-dmr" type="checkbox" ${repTypeEnabled.dmr ? "checked" : ""} data-type="dmr" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-dmr">DMR</td>
+            <td class="color-rep-dmr"><label for="rep-type-dmr" style="cursor:pointer;">DMR</label></td>
             <td align="center"><b class="color-rep-dmr">${repsDMR}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('dmr');" class="csv-button dmr">
@@ -557,9 +586,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.fusion ? "checked" : ""} data-type="fusion" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-fusion" type="checkbox" ${repTypeEnabled.fusion ? "checked" : ""} data-type="fusion" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-fusion">Fusion</td>
+            <td class="color-rep-fusion"><label for="rep-type-fusion" style="cursor:pointer;">Fusion</label></td>
             <td align="center"><b class="color-rep-fusion">${repsYSF}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('fusion');" class="csv-button fusion">
@@ -569,9 +598,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.nxdn ? "checked" : ""} data-type="nxdn" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-nxdn" type="checkbox" ${repTypeEnabled.nxdn ? "checked" : ""} data-type="nxdn" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-nxdn">NXDN</td>
+            <td class="color-rep-nxdn"><label for="rep-type-nxdn" style="cursor:pointer;">NXDN</label></td>
             <td align="center"><b class="color-rep-nxdn">${repsNXDN}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('nxdn');" class="csv-button nxdn">
@@ -581,9 +610,9 @@ function addBottomBox() {
           </tr>
           <tr>
             <td>
-              <input type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
+              <input id="rep-type-parrot" type="checkbox" ${repTypeEnabled.parrot ? "checked" : ""} data-type="parrot" onchange="onRepTypeFilterChange(event)">
             </td>
-            <td class="color-rep-parrot">Parrot</td>
+            <td class="color-rep-parrot"><label for="rep-type-parrot" style="cursor:pointer;">Parrot</label></td>
             <td align="center"><b class="color-rep-parrot">${repsParrot}</b></td>
             <td align="right">
               <button type="button" title="Изтегли CSV формат съвместим с CHIRP" onClick="downloadCSV('parrot');" class="csv-button parrot">
@@ -605,6 +634,14 @@ window.toggleFoldablePanel = function (panelDiv) {
 window.onRepTypeFilterChange = function (e) {
   const type = e.target.getAttribute("data-type");
   repTypeEnabled[type] = e.target.checked;
+  if (window.LZ_DEBUG_FILTERS) {
+    console.debug('[LZ_FILTER_DEBUG]', {
+      reason: 'checkbox:change',
+      type,
+      checked: e.target.checked,
+      repTypeEnabled: { ...repTypeEnabled },
+    });
+  }
   saveRepTypeEnabled();
   refreshMarkers();
 };
@@ -914,6 +951,8 @@ markers.on("popupopen", function (e) {
     sidebar.hide();
   }
   activeMarker = e.popup._source;
+  const repOpen = reps.find((r) => r._marker === activeMarker);
+  debugFilterState(repOpen, 'popupopen:before-move-to-out');
   const popupContent = e.popup.getContent();
   const parser = new DOMParser();
   const doc = parser.parseFromString(popupContent, "text/html");
@@ -937,6 +976,7 @@ markers.on("popupopen", function (e) {
 
     markers.removeLayer(m);
     out.addLayer(m);
+    debugFilterState(repOpen, 'popupopen:after-move-to-out');
     m.openPopup();
     map.addLayer(overlay);
     window.overlay = overlay;
@@ -992,6 +1032,7 @@ markers.on("popupopen", function (e) {
 
     markers.removeLayer(m);
     out.addLayer(m);
+    debugFilterState(repOpen, 'popupopen:after-move-to-out-no-coverage');
     m.openPopup();
     map.addLayer(overlay);
     window.overlay = overlay;
@@ -1001,7 +1042,12 @@ markers.on("popupopen", function (e) {
 out.on("popupclose", function (e) {
   var m = e.popup._source;
   out.removeLayer(m);
-  markers.addLayer(m);
+  const rep = reps.find((r) => r._marker === m);
+  debugFilterState(rep, 'popupclose:before-return');
+  if (isMarkerTypeEnabled(rep)) {
+    markers.addLayer(m);
+  }
+  debugFilterState(rep, 'popupclose:after-return');
   m.closePopup();
 });
 
@@ -1032,6 +1078,7 @@ function searchLayers(name) {
       }
     });
     if (changed) {
+      debugFilterState(rep, 'searchLayers:enabled-types-before-refresh');
       refreshMarkers();
     }
   }
