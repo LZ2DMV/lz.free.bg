@@ -446,7 +446,7 @@ body {
   display: block;
   margin: 4px auto 0;
   border-radius: 4px;
-  overflow: visible;
+  overflow: hidden;
   cursor: pointer;
 }
 
