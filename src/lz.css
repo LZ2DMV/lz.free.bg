@@ -597,6 +597,7 @@ body {
 
 .ob-btn-primary:hover {
   background: #1d4ed8;
+  color: #fff;
 }
 
 .ob-btn-skip {

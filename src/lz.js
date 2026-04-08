@@ -817,20 +817,22 @@ function buildOnboardingHTML() {
   s += '<li>Детайли (честоти, режим, CTCSS…)</li>';
   s += '<li>LOS (линия на видимост) спрямо вашето габърче</li>';
   s += '<li>Покритие на репитера върху картата</li>';
+  s += '<li>📏 Разстояние и 🧭 азимут до репитера (изчислени автоматично)</li>';
   s += '</ul>';
-  s += '<p>След затваряне на инфо прозореца покритието <b>остава</b> видимо. Клик върху картата го скрива.</p>';
-  s += '<p class="ob-note"><i class="fa-solid fa-pencil-alt"></i> Иконката с моливче (горе вляво в инфо прозореца) отваря форма за корекция на данните.</p>';
+  s += '<p>Натиснете ☆ до името на репитера, за да го добавите към <b>любими</b>.</p>';
+  s += '<p class="ob-note"><i class="fa-solid fa-pencil-alt"></i> Моливчето (горе вляво в инфо прозореца) отваря форма за корекция на данните.</p>';
   s += '</div>';
 
   // Slide 4
   s += '<div class="ob-slide" id="ob-slide-4" style="display:none">';
   s += '<div class="ob-icon">🔍</div>';
-  s += '<h3 class="ob-title">Търсачка, филтри и CHIRP</h3>';
+  s += '<h3 class="ob-title">Търсачка, карти, любими и CHIRP</h3>';
   s += '<p><b>Търсачка</b> <img src="img/search_icon.png" style="width:16px;height:16px;vertical-align:middle;"> (горе вдясно): търси по позивна, честота, канал или място — напр. „LZ0PUB", „145.775", „R7", „RU48", „Варна".</p>';
-  s += '<p><b>Панел долу вдясно:</b></p>';
   s += '<ul class="ob-list">';
-  s += '<li>Показвайте/скривайте типове репитери: аналог, DMR, D-STAR, Fusion, NXDN…</li>';
-  s += '<li>Бутонът „Изтегли CSV формат съвместим с CHIRP" генерира файл за програмиране на радиооборудване</li>';
+  s += '<li>Бутонът <i class="fa-solid fa-star"></i> отваря любимите и скорошно разгледаните репитери</li>';
+  s += '<li>Контролът с пластове (горе вдясно) превключва между карти: улична, топографска, сателитна и др.</li>';
+  s += '<li>Панелът долу вдясно показва/скрива типове репитери: аналог, DMR, D-STAR, Fusion, NXDN…</li>';
+  s += '<li>„Изтегли CSV формат съвместим с CHIRP" генерира файл за програмиране на радиооборудване</li>';
   s += '</ul>';
   s += '</div>';
 
@@ -962,7 +964,7 @@ var _savedTileKey = localStorage.getItem('lz_tile_layer') || 'OpenStreetMap';
 if (!_tileLayers[_savedTileKey]) _savedTileKey = 'OpenStreetMap';
 _tileLayers[_savedTileKey].addTo(map);
 
-var _layerControl = L.control.layers(_tileLayers, null, { position: 'topright', collapsed: true }).addTo(map);
+var _layerControl = L.control.layers(_tileLayers, null, { position: 'topright', collapsed: true });
 
 map.on('baselayerchange', function(e) {
   try { localStorage.setItem('lz_tile_layer', e.name); } catch(_) {}
@@ -1683,6 +1685,7 @@ var searchbox = L.control
     autocompleteFeatures: ["setValueOnClick"],
   })
   .addTo(map);
+_layerControl.addTo(map);
 
 setTimeout(() => {
   const searchInput = document.querySelector('.leaflet-searchbox');
