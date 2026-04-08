@@ -279,7 +279,7 @@ function addRepeater(r) {
       '" target="_blank" title="Редактирай информацията за този репитър" style="margin-left:2px;">' +
       '<i class="fa-solid fa-pencil-alt" style="color: #444444; opacity: 0.92;"></i>' +
     '</a>' +
-    '<a href="#" id="lz-fav-btn-' + r.callsign + '" title="Добави/махни от любими" style="margin-left:4px;text-decoration:none;font-size:1.1em;" onclick="_lzToggleFavorite(\'' + r.callsign + '\');return false;">' +
+    '<a href="#" id="lz-fav-btn-' + r.callsign + '" title="Добави/махни от любими" style="text-decoration:none;font-size:1.5em;" onclick="_lzToggleFavorite(\'' + r.callsign + '\');return false;">' +
       (_lzIsFavorite(r.callsign) ? '★' : '☆') +
     '</a>' +
     "</div>" +
@@ -767,7 +767,7 @@ async function doAlert(force = false) {
 
 function showQuickHelp() {
   var content = '';
-  content += '<h3 style="margin:0 0 0.5rem 0;">Бърз старт</h3>';
+  content += '<h3 style="margin:0 0 0.5rem 0;">Бърза проверка</h3>';
   content += '<ol style="margin:0 0 0.8rem 1.1rem; padding:0;">';
   content += '<li>Постави габърчето на твоята позиция (влачене, координати или бутон за текуща локация).</li>';
   content += '<li>Избери репитер от картата или чрез търсачката \&mdash; линията на видимост (LOS) се зарежда автоматично.</li>';
@@ -1002,7 +1002,7 @@ map.on('baselayerchange', function(e) {
 
 let bounds = map.getBounds();
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-let paddingFactorLat = 0.5; // Padding factor for top and bottom (latitude)
+let paddingFactorLat = 1.0; // Padding factor for top and bottom (latitude)
 let paddingFactorLng = isMobile ? 1.2 : 0.5; // Padding factor for left and right (longitude)
 
 let southWest = bounds.getSouthWest();
@@ -1045,6 +1045,14 @@ L.easyButton(
 ).addTo(map);
 
 L.easyButton(
+  "fa-star",
+  function () {
+    showFavoritesModal();
+  },
+  "Любими и скорошно разгледани репитери"
+).addTo(map);
+
+L.easyButton(
   "fa-info",
   function () {
     doAlert(true);
@@ -1058,14 +1066,6 @@ L.easyButton(
     showQuickHelp();
   },
   "Помощ: как да използвам инструментите"
-).addTo(map);
-
-L.easyButton(
-  "fa-star",
-  function () {
-    showFavoritesModal();
-  },
-  "Любими и скорошно разгледани репитери"
 ).addTo(map);
 
 var sidebar = L.control.sidebar("sidebar", {
@@ -1716,7 +1716,7 @@ _layerControl.addTo(map);
 setTimeout(() => {
   const searchInput = document.querySelector('.leaflet-searchbox');
   if (searchInput) {
-    searchInput.setAttribute('placeholder', 'Търси по позивна, място, RX/TX...');
+    searchInput.setAttribute('placeholder', 'Позивна, място, RX/TX...');
     searchInput.setAttribute('title', 'Пример: LZ0PUB, Варна, 145.775');
   }
 }, 0);
