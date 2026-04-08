@@ -439,6 +439,76 @@ body {
   margin-top: 2px;
 }
 
+.terrain-profile-legend {
+  margin: 6px auto 0;
+  max-width: 500px;
+  font-size: 0.82em;
+  line-height: 1.35;
+  color: rgba(34, 34, 34, 0.95);
+  background: rgba(240, 244, 248, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.terrain-profile-header {
+  max-width: 500px;
+  margin: 6px auto 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.terrain-profile-header-text {
+  font-size: 0.85em;
+  color: rgba(34, 34, 34, 0.95);
+}
+
+.terrain-profile-close-warning {
+  color: #b45309;
+  font-size: 0.92em;
+}
+
+.terrain-profile-info-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #f2f6fb;
+  color: #1f3a56;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.terrain-profile-info-btn:hover {
+  background: #e3edf8;
+}
+
+#pin-geolocate-btn,
+#pin-apply-btn {
+  min-width: 28px;
+  min-height: 28px;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+  #pin-geolocate-btn,
+  #pin-apply-btn,
+  .terrain-profile-info-btn {
+    min-width: 34px;
+    min-height: 34px;
+    font-size: 1rem;
+  }
+
+  #pin-lat-input,
+  #pin-lon-input {
+    min-height: 34px;
+  }
+}
+
 .terrain-svg-chart {
   width: 100%;
   max-width: 500px;
@@ -457,4 +527,91 @@ body {
 
 .terrain-profile-button {
   display: none !important;
+}
+
+/* ── Onboarding Wizard ──────────────────────────────────── */
+.ob-container {
+  font-size: 0.93em;
+  line-height: 1.5;
+}
+
+.ob-slide {
+  min-height: 180px;
+}
+
+.ob-icon {
+  font-size: 2rem;
+  margin-bottom: 0.4rem;
+}
+
+.ob-title {
+  margin: 0 0 0.6rem 0;
+  font-size: 1.1em;
+}
+
+.ob-list {
+  margin: 0.3rem 0 0.6rem 1.2rem;
+  padding: 0;
+}
+
+.ob-note {
+  font-size: 0.88em;
+  color: #555;
+  margin-top: 0.6rem;
+}
+
+.ob-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.2rem;
+  gap: 8px;
+}
+
+.ob-nav-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ob-btn {
+  padding: 6px 14px;
+  min-height: 34px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.ob-btn:hover {
+  background: #e8e8e8;
+}
+
+.ob-btn-primary {
+  background: #2563eb;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+
+.ob-btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.ob-btn-skip {
+  background: transparent;
+  border-color: transparent;
+  color: #888;
+}
+
+.ob-btn-skip:hover {
+  color: #333;
+  background: #f0f0f0;
+}
+
+.ob-step-indicator {
+  color: #888;
+  font-size: 0.85em;
+  flex-shrink: 0;
 }

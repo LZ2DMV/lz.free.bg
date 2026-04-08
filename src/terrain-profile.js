@@ -17,6 +17,18 @@
 // ---------------------------------------------------------------------------
 
 const _hgtCache = new Map(); // tileName → ArrayBuffer | null
+const _losDebounceTimers = new Map(); // callsign -> timeout id
+const _losRequestSeq = new Map(); // callsign -> latest request sequence
+
+function _nextLosRequestSeq(callsign) {
+  const next = (_losRequestSeq.get(callsign) || 0) + 1;
+  _losRequestSeq.set(callsign, next);
+  return next;
+}
+
+function _isLosRequestCurrent(callsign, requestSeq) {
+  return _losRequestSeq.get(callsign) === requestSeq;
+}
 
 function _hgtTileName(lat, lon) {
   const ns = lat >= 0 ? 'N' : 'S';
@@ -84,6 +96,24 @@ function _buildLosProfile(profile, txMSL, rxMSL, distKm) {
     const los = txMSL + (rxMSL - txMSL) * t - curve;
     return { d_km: d, terrain_m: elev, los_m: los, blocked: elev > los };
   });
+}
+
+function _getLosStatus(losData) {
+  const blockedSamples = losData.filter(p => p.blocked).length;
+  const blockedPct = Math.round((blockedSamples / losData.length) * 100);
+  const blocked = blockedPct > 0;
+  let statusColor = '#27ae60';
+  if (blockedPct > 50) {
+    statusColor = '#c0392b';
+  } else if (blockedPct >= 30) {
+    statusColor = '#e67e22';
+  }
+  return {
+    blocked,
+    blockedPct,
+    statusText: blocked ? `⚠ ${blockedPct}% блокиран` : '✓ Ясна видимост',
+    statusColor,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -165,12 +195,7 @@ function _renderTerrainSVG(losData, rep, distKm) {
   const rxTop2 = yPx(losData[losData.length - 1].los_m);
 
   // LOS status label
-  const blocked = losData.some(p => p.blocked);
-  const blockedPct = Math.round(losData.filter(p => p.blocked).length / losData.length * 100);
-  const statusText = blocked
-    ? `⚠ ${blockedPct}% блокиран`
-    : '✓ Ясна видимост';
-  const statusColor = blocked ? '#c0392b' : '#27ae60';
+  const { statusText, statusColor } = _getLosStatus(losData);
 
   const svgId = 'tp-hatch-' + rep.callsign; // unique pattern id per callsign
   const svg = `
@@ -273,17 +298,47 @@ function _generateHeyWhatsThatHTML(rep, pin) {
   <div class="terrain-profile-credit">Изображение от <a href="https://www.heywhatsthat.com/" target="_blank">HeyWhatsThat.com</a></div>`;
 }
 
+function _getLosLegendHTML() {
+  return `<div class="terrain-profile-legend">
+    <div><b>LOS подсказка:</b> червената пунктирна линия е линията на видимост.</div>
+    <div>Ако релефът е над линията, има препятствие по трасето.</div>
+    <div>Премести пинчето или пробвай друг репитер за сравнение.</div>
+  </div>`;
+}
+
+function _getLosHeaderHTML(callsign, blockedPct, statusColor, isTooClose) {
+  const pctMarkup = `<b style="color:${statusColor};">${blockedPct}%</b>`;
+  const info = blockedPct > 0
+    ? `Блокирана видимост: ${pctMarkup}`
+    : `Блокирана видимост: ${pctMarkup} (ясна видимост)`;
+  const warning = isTooClose
+    ? '<span class="terrain-profile-close-warning">Разстоянието е много малко; резултатът може да е неточен.</span>'
+    : '';
+  return `<div class="terrain-profile-header">
+    <span class="terrain-profile-header-text">${info}${warning ? ' ' + warning : ''}</span>
+    <button class="terrain-profile-info-btn" type="button" title="Покажи/скрий легенда" aria-label="Покажи или скрий LOS легендата" onclick="return toggleTerrainProfileLegend('${callsign}');">i</button>
+  </div>`;
+}
+
+function _getLegendWithIdHTML(callsign) {
+  return `<div id="terrain-profile-legend-${callsign}" style="display:none;">${_getLosLegendHTML()}</div>`;
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
-async function generateTerrainProfile(callsign) {
+async function _generateTerrainProfileNow(callsign, requestSeq) {
   const rep = window.reps && window.reps.find(r => r.callsign === callsign);
   if (!rep) return;
   const pin = window.draggablePin && window.draggablePin.getLatLng();
   if (!pin) return;
   const container = document.getElementById('terrain-profile-' + callsign);
   if (!container) return;
+  const distKm = window.map.distance(
+    [rep.latitude, rep.longitude], [pin.lat, pin.lng]
+  ) / 1000;
+  const isTooClose = distKm < 5;
 
   // Hide the click-to-generate link
   const linkContainer = container.parentElement;
@@ -296,7 +351,12 @@ async function generateTerrainProfile(callsign) {
 
   // HeyWhatsThat mode — skip SRTM fetch entirely
   if (window.LZ_TERRAIN_PROFILE === 'heywhatsthat') {
-    container.innerHTML = _generateHeyWhatsThatHTML(rep, pin);
+    if (!_isLosRequestCurrent(callsign, requestSeq)) return;
+    const unknownStatusColor = '#27ae60';
+    container.innerHTML =
+      _getLosHeaderHTML(rep.callsign, 0, unknownStatusColor, isTooClose) +
+      _generateHeyWhatsThatHTML(rep, pin) +
+      _getLegendWithIdHTML(rep.callsign);
     return;
   }
 
@@ -307,9 +367,7 @@ async function generateTerrainProfile(callsign) {
     const profile = await _sampleElevationProfile(
       rep.latitude, rep.longitude, pin.lat, pin.lng, nPts
     );
-    const distKm = window.map.distance(
-      [rep.latitude, rep.longitude], [pin.lat, pin.lng]
-    ) / 1000;
+    if (!_isLosRequestCurrent(callsign, requestSeq)) return;
 
     if (distKm < 0.1) {
       container.innerHTML = '<em style="font-size:0.85em;color:#666">Репитерът е твърде близо до габърчето.</em>';
@@ -326,11 +384,35 @@ async function generateTerrainProfile(callsign) {
     const rxMSL = profile[nPts].elev + 2;
 
     const losData = _buildLosProfile(profile, txMSL, rxMSL, distKm);
-    container.innerHTML = _renderTerrainSVG(losData, rep, distKm);
+    const losStatus = _getLosStatus(losData);
+    if (!_isLosRequestCurrent(callsign, requestSeq)) return;
+    container.innerHTML =
+      _getLosHeaderHTML(rep.callsign, losStatus.blockedPct, losStatus.statusColor, isTooClose) +
+      _renderTerrainSVG(losData, rep, distKm) +
+      _getLegendWithIdHTML(rep.callsign);
   } catch (e) {
+    if (!_isLosRequestCurrent(callsign, requestSeq)) return;
     console.error('generateTerrainProfile error:', e);
     container.innerHTML = '<em style="font-size:0.85em;color:#c00">Грешка при зареждане на профила.</em>';
   }
 }
+
+function generateTerrainProfile(callsign) {
+  const prevTimer = _losDebounceTimers.get(callsign);
+  if (prevTimer) clearTimeout(prevTimer);
+  const timerId = setTimeout(() => {
+    _losDebounceTimers.delete(callsign);
+    const requestSeq = _nextLosRequestSeq(callsign);
+    _generateTerrainProfileNow(callsign, requestSeq);
+  }, 180);
+  _losDebounceTimers.set(callsign, timerId);
+}
+
+window.toggleTerrainProfileLegend = function (callsign) {
+  const legend = document.getElementById('terrain-profile-legend-' + callsign);
+  if (!legend) return false;
+  legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+  return false;
+};
 
 window.generateTerrainProfile = generateTerrainProfile;

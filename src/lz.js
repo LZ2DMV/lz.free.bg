@@ -265,7 +265,8 @@ function addRepeater(r) {
   const net = r.internet || {};
   var terrainProfileLink =
     '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
-    `<a href="#" class="terrain-profile-link" title="Regenerate terrain profile" onclick="generateTerrainProfile('${r.callsign}');return false;">↺ Профил на терена</a>` +
+    `<a href="#" class="terrain-profile-link" title="Генерирай линия на видимост (LOS) между пинчето и този репитер" onclick="generateTerrainProfile('${r.callsign}');return false;">↺ Линия на видимост (LOS)</a>` +
+    "<div class='terrain-profile-comment'>Задай пинчето на твоята позиция, после отвори профила.</div>" +
     `<div id='terrain-profile-${r.callsign}' style='width: 100%; text-align: center;'></div>` +
     '</div>';
 
@@ -277,6 +278,9 @@ function addRepeater(r) {
       encodeURIComponent(r.callsign) +
       '" target="_blank" title="Редактирай информацията за този репитър" style="margin-left:2px;">' +
       '<i class="fa-solid fa-pencil-alt" style="color: #444444; opacity: 0.92;"></i>' +
+    '</a>' +
+    '<a href="#" id="lz-fav-btn-' + r.callsign + '" title="Добави/махни от любими" style="margin-left:4px;text-decoration:none;font-size:1.1em;" onclick="_lzToggleFavorite(\'' + r.callsign + '\');return false;">' +
+      (_lzIsFavorite(r.callsign) ? '★' : '☆') +
     '</a>' +
     "</div>" +
     '<h2><a href = "?callsign=' +
@@ -578,6 +582,98 @@ function updateFuseSearch() {
   });
 }
 
+
+// ── Favorites + Recent ────────────────────────────────────────────────────────
+function _lzGetFavorites() {
+  try { return JSON.parse(localStorage.getItem('lz_favorites') || '[]'); } catch(_) { return []; }
+}
+function _lzSaveFavorites(arr) {
+  try { localStorage.setItem('lz_favorites', JSON.stringify(arr)); } catch(_) {}
+}
+function _lzIsFavorite(callsign) {
+  return _lzGetFavorites().indexOf(callsign) !== -1;
+}
+function _lzToggleFavorite(callsign) {
+  var favs = _lzGetFavorites();
+  var idx = favs.indexOf(callsign);
+  if (idx === -1) { favs.push(callsign); } else { favs.splice(idx, 1); }
+  _lzSaveFavorites(favs);
+  // Update star icon in open popup
+  var btn = document.getElementById('lz-fav-btn-' + callsign);
+  if (btn) btn.innerHTML = _lzIsFavorite(callsign) ? '★' : '☆';
+}
+
+function _lzGetRecent() {
+  try { return JSON.parse(localStorage.getItem('lz_recent') || '[]'); } catch(_) { return []; }
+}
+function _lzAddRecent(callsign) {
+  var recent = _lzGetRecent().filter(function(c) { return c !== callsign; });
+  recent.unshift(callsign);
+  if (recent.length > 5) recent = recent.slice(0, 5);
+  try { localStorage.setItem('lz_recent', JSON.stringify(recent)); } catch(_) {}
+}
+
+function showFavoritesModal() {
+  var favs = _lzGetFavorites();
+  var recent = _lzGetRecent();
+  var content = '';
+
+  content += '<h3 style="margin:0 0 0.5rem 0;">★ Любими</h3>';
+  if (favs.length === 0) {
+    content += '<p style="color:#888;font-size:0.9em;">Все още нямате любими. Натиснете ☆ в инфо прозореца на репитер.</p>';
+  } else {
+    content += '<ul style="margin:0 0 0.8rem 1rem;padding:0;">';
+    favs.forEach(function(cs) {
+      content += '<li><a href="#" onclick="searchLayers(\'' + cs + '\');window._lzFavModal&&window._lzFavModal.hide();return false;" style="font-weight:bold;">' + cs + '</a></li>';
+    });
+    content += '</ul>';
+  }
+
+  content += '<hr style="margin:0.6rem 0;">';
+  content += '<h3 style="margin:0 0 0.5rem 0;">🕐 Скорошно разгледани</h3>';
+  if (recent.length === 0) {
+    content += '<p style="color:#888;font-size:0.9em;">Все още не сте отваряли инфо прозорец на репитер.</p>';
+  } else {
+    content += '<ul style="margin:0;padding:0 0 0 1rem;">';
+    recent.forEach(function(cs) {
+      content += '<li><a href="#" onclick="searchLayers(\'' + cs + '\');window._lzFavModal&&window._lzFavModal.hide();return false;">' + cs + '</a></li>';
+    });
+    content += '</ul>';
+  }
+
+  window._lzFavModal = L.control.window(map, {
+    title: 'Любими и скорошни',
+    content: content,
+    maxWidth: 360,
+  }).show();
+}
+
+// ── Azimuth + Distance ────────────────────────────────────────────────────────
+function _lzBearing(lat1, lon1, lat2, lon2) {
+  var toRad = Math.PI / 180;
+  var dLon = (lon2 - lon1) * toRad;
+  var y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+  var x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+          Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+  var brng = Math.atan2(y, x) * 180 / Math.PI;
+  return (brng + 360) % 360;
+}
+
+function _lzBearingLabel(deg) {
+  var dirs = ['С', 'СИ', 'И', 'ЮИ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function _lzDistKm(lat1, lon1, lat2, lon2) {
+  var R = 6371;
+  var toRad = Math.PI / 180;
+  var dLat = (lat2 - lat1) * toRad;
+  var dLon = (lon2 - lon1) * toRad;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+          Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
 async function doAlert(force = false) {
   if (!siteChangelogPromise && typeof fetch === 'function') {
     fetchSiteChangelog();
@@ -596,6 +692,10 @@ async function doAlert(force = false) {
   var stored = localStorage.getItem("lastAlertVersion") || "";
 
   if (stored !== versionKey || force) {
+    if (!localStorage.getItem('lz_onboarding_v1') && !force) {
+      showOnboarding();
+      return;
+    }
     var content = "";
     content += "Последно обновяване на сайта: " + siteVersion + "<br>";
     if (dbLastUpdate) {
@@ -639,6 +739,183 @@ async function doAlert(force = false) {
   }
 }
 
+function showQuickHelp() {
+  var content = '';
+  content += '<h3 style="margin:0 0 0.5rem 0;">Бърз старт</h3>';
+  content += '<ol style="margin:0 0 0.8rem 1.1rem; padding:0;">';
+  content += '<li>Постави габърчето на твоята позиция (влачене, координати или бутон за текуща локация).</li>';
+  content += '<li>Избери репитер от картата или чрез търсачката \&mdash; линията на видимост (LOS) се зарежда автоматично.</li>';
+  content += '</ol>';
+
+  content += '<h3 style="margin:0.4rem 0 0.4rem 0;">Инструменти</h3>';
+  content += '<ul style="margin:0 0 0.8rem 1.1rem; padding:0;">';
+  content += '<li><b>Габърче:</b> определя твоята точка за LOS и списъка с най-близки репитери.</li>';
+  content += '<li><b>LOS:</b> показва релефа и процента блокирана видимост между пинчето и репитера.</li>';
+  content += '<li><b>Търсене:</b> работи по позивна, място, RX/TX.</li>';
+  content += '<li><b>Филтри:</b> в долния десен панел включваш/изключваш режими (FM, DMR, D-Star и др.).</li>';
+  content += '</ul>';
+
+  content += '<h3 style="margin:0.4rem 0 0.4rem 0;">Как се чете LOS</h3>';
+  content += '<ul style="margin:0 0 0 1.1rem; padding:0;">';
+  content += '<li>Процентът над графиката показва колко от трасето е блокирано.</li>';
+  content += '<li>Цветове на процента: зелено (&lt;30%), оранжево (30–50%), червено (&gt;50%).</li>';
+  content += '<li>Бутонът <b>i</b> до процента показва/скрива легендата.</li>';
+  content += '</ul>';
+
+  content += '<p style="margin-top:1rem; text-align:center;">';
+  content += '<a href="#" onclick="_obOpenFromHelp(); return false;" style="font-size:0.9em;">🎓 Покажи урока отново</a>';
+  content += '</p>';
+
+  var _helpWindow = L.control.window(map, {
+    title: 'Помощ',
+    content: content,
+    maxWidth: 520,
+  }).show();
+  window._lzHelpWindow = _helpWindow;
+}
+
+function _obOpenFromHelp() {
+  if (window._lzHelpWindow) {
+    try { window._lzHelpWindow.hide(); } catch(e) {}
+    window._lzHelpWindow = null;
+  }
+  showOnboarding();
+}
+
+function buildOnboardingHTML() {
+  var total = 4;
+  var s = '<div class="ob-container">';
+
+  // Slide 1
+  s += '<div class="ob-slide" id="ob-slide-1">';
+  s += '<div class="ob-icon">🗺️</div>';
+  s += '<h3 class="ob-title">Добре дошли!</h3>';
+  s += '<p>Тази карта показва всички активни репитери в България.</p>';
+  s += '<p>Можете да изчислите <b>линията на видимост (LOS)</b> между вашата позиция и всеки репитер, базирано на реален теренен релеф.</p>';
+  s += '<p>Следващите стъпки ще ви запознаят с основните функции.</p>';
+  s += '</div>';
+
+  // Slide 2
+  s += '<div class="ob-slide" id="ob-slide-2" style="display:none">';
+  s += '<div class="ob-icon"><img src="img/pin.png" style="width:32px;height:32px;vertical-align:middle;"></div>';
+  s += '<h3 class="ob-title">Вашата позиция</h3>';
+  s += '<p>Червеното <b>габърче</b> на картата маркира вашата позиция (QTH).</p>';
+  s += '<ul class="ob-list">';
+  s += '<li>Влачете го до желаното място</li>';
+  s += '<li>Кликнете върху него и въведете координати ръчно</li>';
+  s += '<li>Или натиснете бутона <i class="fa-solid fa-location-crosshairs"></i> в инфо прозореца за автоматична геолокация</li>';
+  s += '</ul>';
+  s += '<p class="ob-note">Позицията се запомня между сесиите.</p>';
+  s += '</div>';
+
+  // Slide 3
+  s += '<div class="ob-slide" id="ob-slide-3" style="display:none">';
+  s += '<div class="ob-icon">📡</div>';
+  s += '<h3 class="ob-title">Избор на репитер</h3>';
+  s += '<p>Кликнете върху маркер на репитер — автоматично се зареждат:</p>';
+  s += '<ul class="ob-list">';
+  s += '<li>Детайли (честоти, режим, CTCSS…)</li>';
+  s += '<li>LOS (линия на видимост) спрямо вашето габърче</li>';
+  s += '<li>Покритие на репитера върху картата</li>';
+  s += '</ul>';
+  s += '<p>След затваряне на инфо прозореца покритието <b>остава</b> видимо. Клик върху картата го скрива.</p>';
+  s += '<p class="ob-note"><i class="fa-solid fa-pencil-alt"></i> Иконката с моливче (горе вляво в инфо прозореца) отваря форма за корекция на данните.</p>';
+  s += '</div>';
+
+  // Slide 4
+  s += '<div class="ob-slide" id="ob-slide-4" style="display:none">';
+  s += '<div class="ob-icon">🔍</div>';
+  s += '<h3 class="ob-title">Търсачка, филтри и CHIRP</h3>';
+  s += '<p><b>Търсачка</b> <img src="img/search_icon.png" style="width:16px;height:16px;vertical-align:middle;"> (горе вдясно): търси по позивна, честота, канал или място — напр. „LZ0PUB", „145.775", „R7", „RU48", „Варна".</p>';
+  s += '<p><b>Панел долу вдясно:</b></p>';
+  s += '<ul class="ob-list">';
+  s += '<li>Показвайте/скривайте типове репитери: аналог, DMR, D-STAR, Fusion, NXDN…</li>';
+  s += '<li>Бутонът „Изтегли CSV формат съвместим с CHIRP" генерира файл за програмиране на радиооборудване</li>';
+  s += '</ul>';
+  s += '</div>';
+
+  // Navigation
+  s += '<div class="ob-nav">';
+  s += '<button class="ob-btn" id="ob-prev" style="visibility:hidden">&#8592; Предишен</button>';
+  s += '<span class="ob-step-indicator" id="ob-indicator">1 / ' + total + '</span>';
+  s += '<div class="ob-nav-right">';
+  s += '<button class="ob-btn ob-btn-skip" id="ob-skip">Пропусни</button>';
+  s += '<button class="ob-btn ob-btn-primary" id="ob-next">Следващ &#8594;</button>';
+  s += '</div>';
+  s += '</div>';
+
+  s += '</div>';
+  return s;
+}
+
+var _obWindow = null;
+var _obCurrentSlide = 1;
+var _obTotal = 4;
+
+function _obGoToSlide(n) {
+  var prev = document.getElementById('ob-slide-' + _obCurrentSlide);
+  var next = document.getElementById('ob-slide-' + n);
+  if (prev) prev.style.display = 'none';
+  if (next) next.style.display = 'block';
+  _obCurrentSlide = n;
+
+  var indicator = document.getElementById('ob-indicator');
+  if (indicator) indicator.textContent = n + ' / ' + _obTotal;
+
+  var prevBtn = document.getElementById('ob-prev');
+  var nextBtn = document.getElementById('ob-next');
+  var skipBtn = document.getElementById('ob-skip');
+
+  if (prevBtn) prevBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
+  if (nextBtn) nextBtn.innerHTML = n === _obTotal ? 'Готово ✓' : 'Следващ &#8594;';
+  if (skipBtn) skipBtn.style.display = n === _obTotal ? 'none' : 'inline-block';
+}
+
+function _obClose() {
+  localStorage.setItem('lz_onboarding_v1', '1');
+  if (_obWindow) {
+    try { _obWindow.hide(); } catch(e) {}
+    _obWindow = null;
+  }
+  // Show info/changelog modal if the user hasn't seen it yet
+  doAlert(false);
+}
+
+function showOnboarding() {
+  _obCurrentSlide = 1;
+  _obWindow = L.control.window(map, {
+    title: 'Добре дошли! 👋',
+    content: buildOnboardingHTML(),
+    maxWidth: 520,
+  }).show();
+
+  setTimeout(function() {
+    var nextBtn = document.getElementById('ob-next');
+    var prevBtn = document.getElementById('ob-prev');
+    var skipBtn = document.getElementById('ob-skip');
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function() {
+        if (_obCurrentSlide < _obTotal) {
+          _obGoToSlide(_obCurrentSlide + 1);
+        } else {
+          _obClose();
+        }
+      });
+    }
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function() {
+        if (_obCurrentSlide > 1) {
+          _obGoToSlide(_obCurrentSlide - 1);
+        }
+      });
+    }
+    if (skipBtn) {
+      skipBtn.addEventListener('click', _obClose);
+    }
+  }, 50);
+}
+
 async function downloadCSV(mode) {
   try {
     await api.downloadChirpCsv({ mode });
@@ -655,13 +932,41 @@ var map = L.map("map", {
   // closePopupOnClick: false
 }).setView([42.7249925, 25.4833039], 8);
 
-L.tileLayer("https://{s}.tile.osm.org/{z}/{x}/{y}.png", {
-  attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors ' +
-    '| Инфо от <a href="http://repeaters.bg" target="_blank">repeaters.bg</a>, <a href="https://repeaters.lz1ny.net/" target="_blank">repeaters.lz1ny.net</a> и др. ' +
-    '| <a href="https://paypal.me/dimitarmilkov" target="_blank">Дарение</a> ' +
-    // '| <a href="https://forms.gle/qxetZjuKpmapVvCz9" target="_blank">Изпрати информация</a> ' +
-    '| <a href="#" onclick="doAlert(true);">Контакт</a>',
-}).addTo(map);
+var _baseAttribution = '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors ' +
+  '| Инфо от <a href="http://repeaters.bg" target="_blank">repeaters.bg</a>, <a href="https://repeaters.lz1ny.net/" target="_blank">repeaters.lz1ny.net</a> и др. ' +
+  '| <a href="https://paypal.me/dimitarmilkov" target="_blank">Дарение</a> ' +
+  '| <a href="#" onclick="doAlert(true);">Контакт</a>';
+
+var _tileLayers = {
+  'OpenStreetMap': L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+    attribution: _baseAttribution, maxZoom: 19
+  }),
+  'OpenTopoMap': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: _baseAttribution + ' | &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)', maxZoom: 17
+  }),
+  'Esri Сателит': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: _baseAttribution + ' | Tiles &copy; Esri', maxZoom: 19
+  }),
+  'CartoDB Светла': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: _baseAttribution + ' | &copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 20
+  }),
+  'CartoDB Тъмна': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: _baseAttribution + ' | &copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 20
+  }),
+  'CartoDB Voyager': L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: _baseAttribution + ' | &copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 20
+  }),
+};
+
+var _savedTileKey = localStorage.getItem('lz_tile_layer') || 'OpenStreetMap';
+if (!_tileLayers[_savedTileKey]) _savedTileKey = 'OpenStreetMap';
+_tileLayers[_savedTileKey].addTo(map);
+
+var _layerControl = L.control.layers(_tileLayers, null, { position: 'topright', collapsed: true }).addTo(map);
+
+map.on('baselayerchange', function(e) {
+  try { localStorage.setItem('lz_tile_layer', e.name); } catch(_) {}
+});
 
 // LZ2DMV: We don't want the user to move the map too far away from where the markers are,
 // so we lock the map to its boundaries after it has been fully loaded, but with a bit of
@@ -717,6 +1022,22 @@ L.easyButton(
     doAlert(true);
   },
   "Информация"
+).addTo(map);
+
+L.easyButton(
+  "fa-circle-question",
+  function () {
+    showQuickHelp();
+  },
+  "Помощ: как да използвам инструментите"
+).addTo(map);
+
+L.easyButton(
+  "fa-star",
+  function () {
+    showFavoritesModal();
+  },
+  "Любими и скорошно разгледани репитери"
 ).addTo(map);
 
 var sidebar = L.control.sidebar("sidebar", {
@@ -803,9 +1124,9 @@ function movePinAndHandlePosition(lat, lon) {
 function getPinPopupContent(latlng) {
   return "" +
     "<div style='min-width:230px;'>" +
-      "<p style='margin:0 0 6px 0;'>Влачи това габърче или задай координати ръчно.</p>" +
+      "<p style='margin:0 0 6px 0;'><b>1)</b> Постави габърчето на твоята позиция.</p>" +
       "<p style='margin:0 0 10px 0; font-size:0.92em;'>" +
-        "От тази точка до избран от теб репитер се изчислява линията на видимост (профил на терена)." +
+        "<b>2)</b> Отвори репитер — линията на видимост (LOS) се зарежда автоматично." +
       "</p>" +
       "<div style='display:flex; gap:6px; align-items:center; flex-wrap:nowrap;'>" +
         "<button id='pin-geolocate-btn' type='button' title='Вземи текущата ми локация'><i class='fa-solid fa-location-crosshairs'></i></button>" +
@@ -830,15 +1151,24 @@ function attachPinPopupHandlers() {
     setTimeout(attachPinPopupHandlers, 0);
   };
 
+  const parseCoordinateValue = function (raw) {
+    const normalized = String(raw || '').trim().replace(',', '.');
+    return Number(normalized);
+  };
+
   const apply = function () {
-    const lat = Number(latInput.value);
-    const lon = Number(lonInput.value);
+    const lat = parseCoordinateValue(latInput.value);
+    const lon = parseCoordinateValue(lonInput.value);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      errorEl.textContent = 'Моля, въведи валидни числа за lat/lon.';
+      errorEl.textContent = 'Моля, въведи валидни числа за lat/lon (пример: 42.6977 или 42,6977).';
       return;
     }
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      errorEl.textContent = 'Координатите са извън допустимите граници.';
+    if (lat < -90 || lat > 90) {
+      errorEl.textContent = 'Latitude трябва да е между -90 и 90.';
+      return;
+    }
+    if (lon < -180 || lon > 180) {
+      errorEl.textContent = 'Longitude трябва да е между -180 и 180.';
       return;
     }
     errorEl.textContent = '';
@@ -968,6 +1298,24 @@ markers.on("popupopen", function (e) {
   // Auto-generate terrain profile (deferred so popup DOM is fully rendered)
   if (repOpen && typeof generateTerrainProfile === 'function') {
     setTimeout(() => generateTerrainProfile(repOpen.callsign), 0);
+  }
+
+  // Track recent + inject distance/azimuth
+  if (repOpen) {
+    _lzAddRecent(repOpen.callsign);
+    setTimeout(function() {
+      var titleLinks = document.querySelector('#lz-dist-' + repOpen.callsign);
+      if (titleLinks) return; // already injected
+      var pin = draggablePin.getLatLng();
+      var distKm = _lzDistKm(pin.lat, pin.lng, repOpen.latitude, repOpen.longitude);
+      var bearing = _lzBearing(pin.lat, pin.lng, repOpen.latitude, repOpen.longitude);
+      var label = _lzBearingLabel(bearing);
+      var html = '<span id="lz-dist-' + repOpen.callsign + '" style="font-size:0.82em;color:#555;">' +
+        '📏 ' + distKm.toFixed(1) + ' km &nbsp;|&nbsp; 🧭 ' + Math.round(bearing) + '° ' + label +
+        '</span>';
+      var titleLinksEl = document.querySelector('.leaflet-popup-content .title-links');
+      if (titleLinksEl) titleLinksEl.insertAdjacentHTML('afterend', html);
+    }, 0);
   }
 });
 
@@ -1336,6 +1684,14 @@ var searchbox = L.control
   })
   .addTo(map);
 
+setTimeout(() => {
+  const searchInput = document.querySelector('.leaflet-searchbox');
+  if (searchInput) {
+    searchInput.setAttribute('placeholder', 'Търси по позивна, място, RX/TX...');
+    searchInput.setAttribute('title', 'Пример: LZ0PUB, Варна, 145.775');
+  }
+}, 0);
+
 searchbox.onInput("keyup", function (e) {
   if (e.keyCode == 13) {
     search();
@@ -1343,11 +1699,16 @@ searchbox.onInput("keyup", function (e) {
     var value = searchbox.getValue();
     if (value != "") {
       var results = fuseSearch.search(value);
-      formatedResults = results.map(
-        (res) =>
-          `📡 | ${res.item.callsign} | ${res.item.place || ''} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
-      );
-      searchbox.setItems(formatedResults);
+      if (results.length) {
+        formatedResults = results.map(
+          (res) =>
+            `📡 | ${res.item.callsign} | ${res.item.place || ''} | RX:${res.item.rx} | TX:${res.item.tx} | ${res.item.modesArray.map(m => m.toUpperCase()).join('+')}`
+        );
+        searchbox.setItems(formatedResults);
+      } else {
+        formatedResults = [];
+        searchbox.setItems(['Няма резултати']);
+      }
     } else {
       searchbox.clearItems();
       formatedResults = null;
@@ -1361,6 +1722,9 @@ searchbox.onAutocomplete("click", search);
 function search() {
   var value = searchbox.getValue();
   if (value != "") {
+    if (value === 'Няма резултати') {
+      return;
+    }
     if (value.includes("📡 |")) {
       searchLayers(value.split("|")[1].trim());
     } else {
