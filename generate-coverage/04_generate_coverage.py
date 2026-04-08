@@ -256,6 +256,52 @@ def compute_radius_km(altitude_asl: int | float | None, fallback_radius: int) ->
     return 200
 
 
+def has_invalid_manifest_bounds(entry: dict | None) -> bool:
+    """
+    Validate manifest bounds payload.
+
+    Expected format:
+      {"bounds": [url, south, west, north, east], ...}
+
+    Returns True when the entry is malformed or contains impossible
+    geographic extents so the repeater is regenerated on the next run.
+    """
+    if not isinstance(entry, dict):
+        return True
+
+    bounds = entry.get("bounds")
+    if not isinstance(bounds, list) or len(bounds) != 5:
+        return True
+
+    try:
+        south = float(bounds[1])
+        west = float(bounds[2])
+        north = float(bounds[3])
+        east = float(bounds[4])
+    except (TypeError, ValueError):
+        return True
+
+    return not are_bounds_values_valid(south, west, north, east)
+
+
+def are_bounds_values_valid(south: float, west: float, north: float, east: float) -> bool:
+    """Return True when map bounds are geographically sane."""
+    if not (-90.0 <= south <= 90.0 and -90.0 <= north <= 90.0):
+        return False
+    if not (-180.0 <= west <= 180.0 and -180.0 <= east <= 180.0):
+        return False
+    if south >= north:
+        return False
+
+    # Guard against broken wraps/overflows from external tools.
+    if (north - south) > 180.0:
+        return False
+    if (east - west) > 360.0:
+        return False
+
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Signal Server runner
 # ---------------------------------------------------------------------------
@@ -366,7 +412,7 @@ def ppm_to_png(ppm_path: Path, png_path: Path, updated: str) -> bool:
         [im_cmd, str(ppm_path),
          "-fuzz", "12%", "-transparent", "white",
          "-blur", "0x4",
-         "-channel", "alpha", "-evaluate", "multiply", "0.60",
+         "-channel", "alpha", "-evaluate", "multiply", "0.45",
          str(png_path)],
         capture_output=True, text=True,
     )
@@ -489,8 +535,17 @@ def main() -> None:
             manifest_entry = manifest.get(callsign, {})
             manifest_updated = (manifest_entry.get("updated") or ""
                                 if isinstance(manifest_entry, dict) else "")
+            invalid_bounds = has_invalid_manifest_bounds(manifest_entry)
 
-            if manifest_updated and manifest_updated == api_updated:
+            # A previously-failed entry is always retried, even if the
+            # 'updated' timestamp hasn't changed (the failure may have been
+            # transient — OOM crash, missing SDF tile, etc.).
+            previously_failed = isinstance(manifest_entry, dict) and manifest_entry.get("failed")
+            must_regenerate = invalid_bounds or previously_failed
+
+            if invalid_bounds:
+                print("  Stored manifest bounds are invalid — regenerating")
+            elif manifest_updated and manifest_updated == api_updated:
                 print(f"  [skip] up-to-date (updated={api_updated})")
                 skipped += 1
                 continue
@@ -498,15 +553,18 @@ def main() -> None:
             # Fallback: read 'updated' embedded in the PNG file itself.
             # This handles the case where manifest.json was deleted or is stale
             # but the PNG still carries its own freshness metadata.
-            png_updated = read_png_updated(png_path)
-            if png_updated and png_updated == api_updated:
-                print(f"  [skip] PNG comment up-to-date (updated={api_updated})")
-                # Repair the manifest entry from the PNG's embedded data so
-                # future runs use the fast path.
-                if isinstance(manifest_entry, dict) and manifest_entry.get("bounds"):
-                    manifest[callsign]["updated"] = png_updated
-                skipped += 1
-                continue
+            if not must_regenerate:
+                png_updated = read_png_updated(png_path)
+                if png_updated and png_updated == api_updated:
+                    print(f"  [skip] PNG comment up-to-date (updated={api_updated})")
+                    # Repair the manifest entry from the PNG's embedded data so
+                    # future runs use the fast path.
+                    if isinstance(manifest_entry, dict) and manifest_entry.get("bounds"):
+                        manifest[callsign]["updated"] = png_updated
+                    skipped += 1
+                    continue
+            else:
+                png_updated = read_png_updated(png_path)
 
             print(f"  Repeater record changed — regenerating "
                   f"(was: {manifest_updated or png_updated or 'unknown'}, "
@@ -547,6 +605,14 @@ def main() -> None:
         north, east, south, west = bounds
         print(f"  Bounds [{callsign}]: N={north} E={east} S={south} W={west}")
 
+        south_f = float(south)
+        west_f = float(west)
+        north_f = float(north)
+        east_f = float(east)
+        if not are_bounds_values_valid(south_f, west_f, north_f, east_f):
+            print(f"  ERROR: Signal Server returned invalid bounds for {callsign}; skipping write")
+            return {"callsign": callsign, "status": "failed"}
+
         if not ppm_to_png(ppm_path, png_path, api_updated):
             return {"callsign": callsign, "status": "failed"}
 
@@ -559,7 +625,7 @@ def main() -> None:
             "callsign": callsign,
             "status": "ok",
             "manifest_entry": {
-                "bounds": [rel_url, float(south), float(west), float(north), float(east)],
+                "bounds": [rel_url, south_f, west_f, north_f, east_f],
                 "updated": api_updated,
             },
             "png_path": png_path,
@@ -576,6 +642,7 @@ def main() -> None:
                     result = future.result()
                 except Exception as e:
                     print(f"  FAILED — skipping {callsign}: {e}")
+                    manifest[callsign] = {"failed": True, "updated": item["api_updated"]}
                     failed += 1
                     continue
 
@@ -587,6 +654,9 @@ def main() -> None:
                     ok += 1
                 elif status == "failed":
                     print(f"  FAILED — skipping {callsign}")
+                    # Mark in manifest so the map skips this repeater and the
+                    # next run retries it regardless of the 'updated' timestamp.
+                    manifest[callsign] = {"failed": True, "updated": item["api_updated"]}
                     failed += 1
 
     # ---- Write manifest --------------------------------------------------------
