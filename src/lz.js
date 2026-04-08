@@ -202,7 +202,7 @@ async function loadCoverageManifest() {
     if (Object.keys(coverageManifest).length) {
       reps.forEach(r => {
         const entry = coverageManifest[r.callsign];
-        if (entry) {
+        if (entry && !entry.failed) {
           r.coverage = Array.isArray(entry) ? entry : entry.bounds;
         }
       });

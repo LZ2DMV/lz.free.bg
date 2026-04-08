@@ -366,7 +366,7 @@ def ppm_to_png(ppm_path: Path, png_path: Path, updated: str) -> bool:
         [im_cmd, str(ppm_path),
          "-fuzz", "12%", "-transparent", "white",
          "-blur", "0x4",
-         "-channel", "alpha", "-evaluate", "multiply", "0.60",
+         "-channel", "alpha", "-evaluate", "multiply", "0.45",
          str(png_path)],
         capture_output=True, text=True,
     )
@@ -490,7 +490,12 @@ def main() -> None:
             manifest_updated = (manifest_entry.get("updated") or ""
                                 if isinstance(manifest_entry, dict) else "")
 
-            if manifest_updated and manifest_updated == api_updated:
+            # A previously-failed entry is always retried, even if the
+            # 'updated' timestamp hasn't changed (the failure may have been
+            # transient — OOM crash, missing SDF tile, etc.).
+            previously_failed = isinstance(manifest_entry, dict) and manifest_entry.get("failed")
+
+            if not previously_failed and manifest_updated and manifest_updated == api_updated:
                 print(f"  [skip] up-to-date (updated={api_updated})")
                 skipped += 1
                 continue
@@ -576,6 +581,7 @@ def main() -> None:
                     result = future.result()
                 except Exception as e:
                     print(f"  FAILED — skipping {callsign}: {e}")
+                    manifest[callsign] = {"failed": True, "updated": item["api_updated"]}
                     failed += 1
                     continue
 
@@ -587,6 +593,9 @@ def main() -> None:
                     ok += 1
                 elif status == "failed":
                     print(f"  FAILED — skipping {callsign}")
+                    # Mark in manifest so the map skips this repeater and the
+                    # next run retries it regardless of the 'updated' timestamp.
+                    manifest[callsign] = {"failed": True, "updated": item["api_updated"]}
                     failed += 1
 
     # ---- Write manifest --------------------------------------------------------
