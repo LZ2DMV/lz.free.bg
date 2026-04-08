@@ -111,7 +111,7 @@ function _getLosStatus(losData) {
   return {
     blocked,
     blockedPct,
-    statusText: blocked ? `⚠ ${blockedPct}% блокиран` : '✓ Ясна видимост',
+    statusText: blocked ? `⚠ ${blockedPct}% блокиран` : '✓ Пряка видимост',
     statusColor,
   };
 }
@@ -310,7 +310,7 @@ function _getLosHeaderHTML(callsign, blockedPct, statusColor, isTooClose) {
   const pctMarkup = `<b style="color:${statusColor};">${blockedPct}%</b>`;
   const info = blockedPct > 0
     ? `Блокирана видимост: ${pctMarkup}`
-    : `Блокирана видимост: ${pctMarkup} (ясна видимост)`;
+    : `Блокирана видимост: ${pctMarkup} (пряка видимост)`;
   const warning = isTooClose
     ? '<span class="terrain-profile-close-warning">Разстоянието е много малко; резултатът може да е неточен.</span>'
     : '';
