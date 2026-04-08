@@ -838,7 +838,7 @@ function buildOnboardingHTML() {
   s += '<div class="ob-slide" id="ob-slide-3" style="display:none">';
   s += '<div class="ob-icon">📡</div>';
   s += '<h3 class="ob-title">Избор на репитер</h3>';
-  s += '<p>Кликнете върху маркер на репитер — автоматично се зареждат:</p>';
+  s += '<p>Кликнете върху маркер на репитер - автоматично се зареждат:</p>';
   s += '<ul class="ob-list">';
   s += '<li>Детайли (честоти, режим, CTCSS…)</li>';
   s += '<li>LOS (линия на видимост) спрямо вашето габърче</li>';
@@ -1002,7 +1002,7 @@ map.on('baselayerchange', function(e) {
 
 let bounds = map.getBounds();
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-let paddingFactorLat = 1.0; // Padding factor for top and bottom (latitude)
+let paddingFactorLat = 0.8; // Padding factor for top and bottom (latitude)
 let paddingFactorLng = isMobile ? 1.2 : 0.5; // Padding factor for left and right (longitude)
 
 let southWest = bounds.getSouthWest();
@@ -1154,7 +1154,7 @@ function getPinPopupContent(latlng) {
     "<div style='min-width:230px;'>" +
       "<p style='margin:0 0 6px 0;'><b>1)</b> Постави габърчето на твоята позиция.</p>" +
       "<p style='margin:0 0 10px 0; font-size:0.92em;'>" +
-        "<b>2)</b> Отвори репитер — линията на видимост (LOS) се зарежда автоматично." +
+        "<b>2)</b> Отвори репитер - линията на видимост (LOS) се зарежда автоматично." +
       "</p>" +
       "<div style='display:flex; gap:6px; align-items:center; flex-wrap:nowrap;'>" +
         "<button id='pin-geolocate-btn' type='button' title='Вземи текущата ми локация'><i class='fa-solid fa-location-crosshairs'></i></button>" +
@@ -1441,6 +1441,10 @@ function setSidebar() {
     var pencil = reptitle.querySelector('a[href^="https://repeaters.varna.radio/#/request?callsign="]');
     if (pencil) {
       pencil.parentNode.removeChild(pencil);
+    }
+    var fav = reptitle.querySelector('a[id^="lz-fav-btn-"]');
+    if (fav) {
+      fav.parentNode.removeChild(fav);
     }
   }
   var result = reptitle ? reptitle.innerHTML : '';
