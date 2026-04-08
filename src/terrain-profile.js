@@ -360,7 +360,7 @@ async function _generateTerrainProfileNow(callsign, requestSeq) {
     return;
   }
 
-  container.innerHTML = '<em style="font-size:0.85em;color:#666">Зарежда профил на терена…</em>';
+  container.innerHTML = '<em style="font-size:0.85em;color:#666">Зареждам профил на терена…</em>';
 
   try {
     const nPts = 250;
