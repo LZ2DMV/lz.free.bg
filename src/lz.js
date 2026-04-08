@@ -603,6 +603,25 @@ function _lzToggleFavorite(callsign) {
   if (btn) btn.innerHTML = _lzIsFavorite(callsign) ? '★' : '☆';
 }
 
+function _lzRefreshFavoritesModal() {
+  if (!window._lzFavModal || typeof window._lzFavModal.content !== 'function') return;
+  window._lzFavModal.content(buildFavoritesModalContent());
+}
+
+function _lzRemoveFavorite(callsign) {
+  if (!_lzIsFavorite(callsign)) return false;
+  if (!confirm('Да премахна ли ' + callsign + ' от любими?')) return false;
+
+  var favs = _lzGetFavorites().filter(function(cs) { return cs !== callsign; });
+  _lzSaveFavorites(favs);
+
+  var btn = document.getElementById('lz-fav-btn-' + callsign);
+  if (btn) btn.innerHTML = '☆';
+
+  _lzRefreshFavoritesModal();
+  return false;
+}
+
 function _lzGetRecent() {
   try { return JSON.parse(localStorage.getItem('lz_recent') || '[]'); } catch(_) { return []; }
 }
@@ -613,7 +632,7 @@ function _lzAddRecent(callsign) {
   try { localStorage.setItem('lz_recent', JSON.stringify(recent)); } catch(_) {}
 }
 
-function showFavoritesModal() {
+function buildFavoritesModalContent() {
   var favs = _lzGetFavorites();
   var recent = _lzGetRecent();
   var content = '';
@@ -624,7 +643,10 @@ function showFavoritesModal() {
   } else {
     content += '<ul style="margin:0 0 0.8rem 1rem;padding:0;">';
     favs.forEach(function(cs) {
-      content += '<li><a href="#" onclick="searchLayers(\'' + cs + '\');window._lzFavModal&&window._lzFavModal.hide();return false;" style="font-weight:bold;">' + cs + '</a></li>';
+      content += '<li style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">' +
+        '<a href="#" onclick="searchLayers(\'' + cs + '\');window._lzFavModal&&window._lzFavModal.hide();return false;" style="font-weight:bold;">' + cs + '</a>' +
+        '<button type="button" onclick="return _lzRemoveFavorite(\'' + cs + '\');" title="Премахни от любими" style="border:1px solid #ccc;background:#fff;color:#b42318;border-radius:4px;padding:0.12rem 0.45rem;cursor:pointer;font-size:0.82rem;">Премахни</button>' +
+      '</li>';
     });
     content += '</ul>';
   }
@@ -641,9 +663,13 @@ function showFavoritesModal() {
     content += '</ul>';
   }
 
+  return content;
+}
+
+function showFavoritesModal() {
   window._lzFavModal = L.control.window(map, {
     title: 'Любими и скорошни',
-    content: content,
+    content: buildFavoritesModalContent(),
     maxWidth: 360,
   }).show();
 }
