@@ -816,8 +816,8 @@ function buildOnboardingHTML() {
   s += '<div class="ob-slide" id="ob-slide-1">';
   s += '<div class="ob-icon">🗺️</div>';
   s += '<h3 class="ob-title">Добре дошли!</h3>';
-  s += '<p>Тази карта показва всички активни репитери в България.</p>';
-  s += '<p>Можете да изчислите <b>линията на видимост (LOS)</b> между вашата позиция и всеки репитер, базирано на реален теренен релеф.</p>';
+  s += '<p>Тази карта показва всички активни аналогови и цифрови УКВ репитери на територията на България.</p>';
+  s += '<p>Можете да изчислите <b>линията на видимост (LOS)</b> между вашата позиция и всеки репитер, базирано на особеностите на терена.</p>';
   s += '<p>Следващите стъпки ще ви запознаят с основните функции.</p>';
   s += '</div>';
 
@@ -838,11 +838,11 @@ function buildOnboardingHTML() {
   s += '<div class="ob-slide" id="ob-slide-3" style="display:none">';
   s += '<div class="ob-icon">📡</div>';
   s += '<h3 class="ob-title">Избор на репитер</h3>';
-  s += '<p>Кликнете върху маркер на репитер - автоматично се зареждат:</p>';
+  s += '<p>Кликнете върху маркер на репитер на картата - автоматично се зареждат:</p>';
   s += '<ul class="ob-list">';
   s += '<li>Детайли (честоти, режим, CTCSS…)</li>';
   s += '<li>LOS (линия на видимост) спрямо вашето габърче</li>';
-  s += '<li>Покритие на репитера върху картата</li>';
+  s += '<li>Прогнозно покритие на репитера върху картата</li>';
   s += '<li>📏 Разстояние и 🧭 азимут до репитера (изчислени автоматично)</li>';
   s += '</ul>';
   s += '<p>Натиснете ☆ до името на репитера, за да го добавите към <b>любими</b>.</p>';
@@ -853,12 +853,12 @@ function buildOnboardingHTML() {
   s += '<div class="ob-slide" id="ob-slide-4" style="display:none">';
   s += '<div class="ob-icon">🔍</div>';
   s += '<h3 class="ob-title">Търсачка, карти, любими и CHIRP</h3>';
-  s += '<p><b>Търсачка</b> <img src="img/search_icon.png" style="width:16px;height:16px;vertical-align:middle;"> (горе вдясно): търси по позивна, честота, канал или място — напр. „LZ0PUB", „145.775", „R7", „RU48", „Варна".</p>';
+  s += '<p><b>Търсачка</b> <img src="img/search_icon.png" style="width:16px;height:16px;vertical-align:middle;"> (горе вдясно): търси по позивна, честота, канал или място - напр. „LZ0PUB", „145.775", „R7", „RU48", „Варна".</p>';
   s += '<ul class="ob-list">';
   s += '<li>Бутонът <i class="fa-solid fa-star"></i> отваря любимите и скорошно разгледаните репитери</li>';
-  s += '<li>Контролът с пластове (горе вдясно) превключва между карти: улична, топографска, сателитна и др.</li>';
+  s += '<li>Селекторът с пластове (горе вдясно) превключва между видовете карта: улична, топографска, сателитна и др.</li>';
   s += '<li>Панелът долу вдясно показва/скрива типове репитери: аналог, DMR, D-STAR, Fusion, NXDN…</li>';
-  s += '<li>„Изтегли CSV формат съвместим с CHIRP" генерира файл за програмиране на радиооборудване</li>';
+  s += '<li>„Изтегли CSV формат съвместим с CHIRP" генерира файл за програмиране на радиостанция</li>';
   s += '</ul>';
   s += '</div>';
 
@@ -1061,7 +1061,7 @@ L.easyButton(
 ).addTo(map);
 
 L.easyButton(
-  "fa-circle-question",
+  "fa-graduation-cap",
   function () {
     showQuickHelp();
   },
@@ -1720,7 +1720,7 @@ _layerControl.addTo(map);
 setTimeout(() => {
   const searchInput = document.querySelector('.leaflet-searchbox');
   if (searchInput) {
-    searchInput.setAttribute('placeholder', 'Позивна, място, RX/TX...');
+    searchInput.setAttribute('placeholder', 'Позивна, място, канал, RX/TX...');
     searchInput.setAttribute('title', 'Пример: LZ0PUB, Варна, 145.775');
   }
 }, 0);
