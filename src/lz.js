@@ -310,7 +310,7 @@ function _buildRepeaterPopupHTML(r) {
     r.keeper +
     "</b><br>" +
     (Number(r.power) > 0 ? "Мощност: <b>" + Number(r.power) + "</b> W<br>" : "") +
-    (r.altitude ? "Си mar ska височина: <b>" + r.altitude + "</b> м<br>" : "") +
+    (r.altitude ? "Надморска височина: <b>" + r.altitude + "</b> м<br>" : "") +
     "QTH: <b>" +
     r.qth +
     "</b><br>" +
@@ -324,6 +324,7 @@ function _buildRepeaterPopupHTML(r) {
 }
 
 function addRepeater(r) {
+  /*
   const net = r.internet || {};
   var terrainProfileLink =
     '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
@@ -382,7 +383,8 @@ function addRepeater(r) {
     "<hr>" +
     r.infoHTML +
     "</div>";
-
+    */
+  
   var marker = L.marker(new L.LatLng(r.latitude, r.longitude), {
     title: r.callsign + " - " + (r.place || ''),
     icon: L.divIcon({
@@ -1109,7 +1111,7 @@ map.on('baselayerchange', function(e) {
 let bounds = map.getBounds();
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let paddingFactorLat = 0.8; // Padding factor for top and bottom (latitude)
-let paddingFactorLng = isMobile ? 1.2 : 0.5; // Padding factor for left and right (longitude)
+let paddingFactorLng = isMobile ? 1.6 : 0.8; // Padding factor for left and right (longitude)
 
 let southWest = bounds.getSouthWest();
 let northEast = bounds.getNorthEast();
