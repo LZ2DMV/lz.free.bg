@@ -669,7 +669,13 @@ function buildFavoritesModalContent() {
 function showFavoritesModal() {
   // Check if window is already open
   if (window._lzFavModal) {
-    try { window._lzFavModal.show(); } catch(e) {}
+    try {
+      // Update the content with fresh data
+      if (typeof window._lzFavModal.content === 'function') {
+        window._lzFavModal.content(buildFavoritesModalContent());
+      }
+      window._lzFavModal.show();
+    } catch(e) {}
     return;
   }
   window._lzFavModal = L.control.window(map, {
