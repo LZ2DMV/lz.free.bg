@@ -261,6 +261,68 @@ async function loadCoverageManifest() {
   }
 })();
 
+function _buildRepeaterPopupHTML(r) {
+  const net = r.internet || {};
+  var terrainProfileLink =
+    '<div class="terrain-profile-link-container" style="width: 100%; text-align: center;">' +
+    `<a href="#" class="terrain-profile-link" title="Генерирай линия на видимост (LOS) между пинчето и този репитер" onclick="generateTerrainProfile('${r.callsign}');return false;">↺ Линия на видимост (LOS)</a>` +
+    "<div class='terrain-profile-comment'>Задай пинчето на твоята позиция, после отвори профила.</div>" +
+    `<div id='terrain-profile-${r.callsign}' style='width: 100%; text-align: center;'></div>` +
+    '</div>';
+
+  var title =
+    '<div class="reptitle">' +
+    '<div style="float: left; position: absolute; display: flex; align-items: center; gap: 0.5em;">' +
+    '<a href="#" class="remove-for-sidebar" title="Отвори в странична лента" onclick="setSidebar();"><i class="fa-solid fa-window-restore"></i></a>' +
+    '<a href="https://repeaters.varna.radio/#/request?callsign=' +
+      encodeURIComponent(r.callsign) +
+      '" target="_blank" title="Редактирай информацията за този репитър" style="margin-left:2px;">' +
+      '<i class="fa-solid fa-pencil-alt" style="color: #444444; opacity: 0.92;"></i>' +
+    '</a>' +
+    '<a href="#" id="lz-fav-btn-' + r.callsign + '" title="Добави/махни от любими" style="text-decoration:none;font-size:1.5em;" onclick="_lzToggleFavorite(\'' + r.callsign + '\');return false;">' +
+      (_lzIsFavorite(r.callsign) ? '★' : '☆') +
+    '</a>' +
+    "</div>" +
+    '<h2><a href = "?callsign=' +
+    r.callsign +
+    '" title = "вземи директен линк за този репитър" target = "_blank" > ' +
+    r.callsign +
+    "</a></h2 > " +
+    '<div class="title-links">' +
+    "<b>" +
+    r.locationLabel +
+    "</b>" +
+    "</div>" +
+    terrainProfileLink +
+    "<hr>" +
+    "RX: <b>" +
+    r.rx +
+    "</b> MHz<br>" +
+    "TX: <b>" +
+    r.tx +
+    "</b> MHz<br>" +
+    (r.tone ? "Тон: <b>" + r.tone + "</b><br>" : "") +
+    (r.channel ? "Канал: <b>" + r.channel + "</b><br>" : "") +
+    "Режим на работа: <b>" +
+    r.modesString +
+    "</b><br>" +
+    "Отговорник: <b>" +
+    r.keeper +
+    "</b><br>" +
+    (Number(r.power) > 0 ? "Мощност: <b>" + Number(r.power) + "</b> W<br>" : "") +
+    (r.altitude ? "Си mar ska височина: <b>" + r.altitude + "</b> м<br>" : "") +
+    "QTH: <b>" +
+    r.qth +
+    "</b><br>" +
+    (net.echolink ? "Echolink #: <b>" + net.echolink + "</b><br>" : "") +
+    (net.allstarlink ? "AllStarLink Node: <b>" + net.allstarlink + "</b><br>" : "") +
+    (net.zello ? "Zello: <b>" + net.zello + "</b><br>" : "") +
+    "<hr>" +
+    r.infoHTML +
+    "</div>";
+  return title;
+}
+
 function addRepeater(r) {
   const net = r.internet || {};
   var terrainProfileLink =
@@ -347,7 +409,10 @@ function addRepeater(r) {
       className: "modes",
     }),
   });
-  marker.bindPopup(title, {
+  marker.bindPopup(function() {
+    // Generate popup HTML dynamically so the star reflects current favorite status
+    return _buildRepeaterPopupHTML(r);
+  }, {
     // autoClose: false,
     // autoPan: false,
   });
