@@ -667,6 +667,11 @@ function buildFavoritesModalContent() {
 }
 
 function showFavoritesModal() {
+  // Check if window is already open
+  if (window._lzFavModal) {
+    try { window._lzFavModal.show(); } catch(e) {}
+    return;
+  }
   window._lzFavModal = L.control.window(map, {
     title: 'Любими и скорошни',
     content: buildFavoritesModalContent(),
@@ -701,6 +706,11 @@ function _lzDistKm(lat1, lon1, lat2, lon2) {
 }
 
 async function doAlert(force = false) {
+  // Check if alert window is already open - reuse it regardless of force
+  if (window._lzAlertWindow) {
+    try { window._lzAlertWindow.show(); } catch(e) {}
+    return;
+  }
   if (!siteChangelogPromise && typeof fetch === 'function') {
     fetchSiteChangelog();
   }
@@ -754,7 +764,7 @@ async function doAlert(force = false) {
 
     content += "<br>История на промените (сайт):<br>" + getSiteChangelogMarkup();
 
-    var modal = L.control
+    window._lzAlertWindow = L.control
       .window(map, {
         title: "Добре дошли!",
         content: content,
@@ -766,6 +776,11 @@ async function doAlert(force = false) {
 }
 
 function showQuickHelp() {
+  // Check if help window is already open
+  if (window._lzHelpWindow) {
+    try { window._lzHelpWindow.show(); } catch(e) {}
+    return;
+  }
   var content = '';
   content += '<h3 style="margin:0 0 0.5rem 0;">Бърза проверка</h3>';
   content += '<ol style="margin:0 0 0.8rem 1.1rem; padding:0;">';
@@ -804,6 +819,11 @@ function _obOpenFromHelp() {
   if (window._lzHelpWindow) {
     try { window._lzHelpWindow.hide(); } catch(e) {}
     window._lzHelpWindow = null;
+  }
+  // Ensure any existing onboarding window is properly closed
+  if (_obWindow) {
+    try { _obWindow.hide(); } catch(e) {}
+    _obWindow = null;
   }
   showOnboarding();
 }
@@ -910,6 +930,12 @@ function _obClose() {
 }
 
 function showOnboarding() {
+  // Clean up any old onboarding elements that might still be in the DOM
+  var oldContainer = document.querySelector('.ob-container');
+  if (oldContainer && oldContainer.parentNode) {
+    oldContainer.parentNode.removeChild(oldContainer);
+  }
+  
   _obCurrentSlide = 1;
   _obWindow = L.control.window(map, {
     title: 'Добре дошли! 👋',
@@ -917,31 +943,40 @@ function showOnboarding() {
     maxWidth: 520,
   }).show();
 
+  // Wait a tick for the window to render, then attach listeners
   setTimeout(function() {
     var nextBtn = document.getElementById('ob-next');
     var prevBtn = document.getElementById('ob-prev');
     var skipBtn = document.getElementById('ob-skip');
 
     if (nextBtn) {
-      nextBtn.addEventListener('click', function() {
+      nextBtn.onclick = function(e) {
+        e.preventDefault();
         if (_obCurrentSlide < _obTotal) {
           _obGoToSlide(_obCurrentSlide + 1);
         } else {
           _obClose();
         }
-      });
+        return false;
+      };
     }
     if (prevBtn) {
-      prevBtn.addEventListener('click', function() {
+      prevBtn.onclick = function(e) {
+        e.preventDefault();
         if (_obCurrentSlide > 1) {
           _obGoToSlide(_obCurrentSlide - 1);
         }
-      });
+        return false;
+      };
     }
     if (skipBtn) {
-      skipBtn.addEventListener('click', _obClose);
+      skipBtn.onclick = function(e) {
+        e.preventDefault();
+        _obClose();
+        return false;
+      };
     }
-  }, 50);
+  }, 10);
 }
 
 async function downloadCSV(mode) {
