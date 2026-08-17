@@ -806,7 +806,7 @@ async function doAlert(force = false) {
       return;
     }
     var content = "";
-    content += "Последно обновяване на сайта: " + siteVersion + "<br>";
+    // content += "Последно обновяване на сайта: " + siteVersion + "<br>";
     if (dbLastUpdate) {
       content += "Последно обновяване на базата: " + dbLastUpdate + "<br>";
     }
