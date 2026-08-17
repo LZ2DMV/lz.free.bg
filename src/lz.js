@@ -1523,39 +1523,50 @@ function clearHomeIfExists() {
 }
 
 function setSidebar() {
+  if (!activeMarker) {
+    console.warn("setSidebar(): no activeMarker");
+    return;
+  }
+
   if (activeForNearbyNodes === true) {
     map.closePopup();
   }
+
   sidebarActive = true;
-  var popup = activeMarker.getPopup();
-  var c = popup.getContent();
-  var parser = new DOMParser();
-  var el = parser.parseFromString(c, "text/html");
-  el.querySelectorAll(".remove-for-sidebar").forEach((e) =>
-    e.parentNode.removeChild(e)
-  );
-  var reptitle = el.querySelector(".reptitle");
+
+  const rep = reps.find((r) => r._marker === activeMarker);
+  if (!rep) {
+    console.warn("setSidebar(): repeater not found for activeMarker", activeMarker);
+    return;
+  }
+
+  const parser = new DOMParser();
+  const html = _buildRepeaterPopupHTML(rep);
+  const el = parser.parseFromString(html, "text/html");
+
+  el.querySelectorAll(".remove-for-sidebar").forEach((e) => e.remove());
+
+  const reptitle = el.querySelector(".reptitle");
   if (reptitle) {
-    var terrainContainer = reptitle.querySelector('.terrain-profile-link-container');
+    const terrainContainer = reptitle.querySelector('.terrain-profile-link-container');
     if (terrainContainer) {
       terrainContainer.style.textAlign = 'left';
       terrainContainer.style.marginTop = '0.5em';
-      var comment = terrainContainer.querySelector('.terrain-profile-comment');
+      const comment = terrainContainer.querySelector('.terrain-profile-comment');
       if (comment) {
         comment.style.textAlign = 'left';
         comment.style.marginTop = '2px';
       }
     }
-    var pencil = reptitle.querySelector('a[href^="https://repeaters.varna.radio/#/request?callsign="]');
-    if (pencil) {
-      pencil.parentNode.removeChild(pencil);
-    }
-    var fav = reptitle.querySelector('a[id^="lz-fav-btn-"]');
-    if (fav) {
-      fav.parentNode.removeChild(fav);
-    }
+
+    const pencil = reptitle.querySelector('a[href^="https://repeaters.varna.radio/#/request?callsign="]');
+    if (pencil) pencil.remove();
+
+    const fav = reptitle.querySelector('a[id^="lz-fav-btn-"]');
+    if (fav) fav.remove();
   }
-  var result = reptitle ? reptitle.innerHTML : '';
+
+  const result = reptitle ? reptitle.innerHTML : '';
   sidebar.setContent("<p>" + result + "</p>");
   sidebar.show();
 }
